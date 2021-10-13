@@ -5,7 +5,7 @@
  *
  *    TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
  *
- *    1. Definitions.
+ *    1. Definitions.an the co
  *
  *       "License" shall mean the terms and conditions for use, reproduction,
  *       and distribution as defined by Sections 1 through 9 of this document.
@@ -211,7 +211,7 @@
 #include "file_sink_roi_impl.h"
 #include <volk/volk.h>
 #include <numeric>
-
+#include <iostream>
 #include <ctime>
 #include <sys/time.h>
 
@@ -339,10 +339,10 @@ namespace gr {
 //            float tmp1 = fft_abs[syn_sine_frequency_index+1] + fft_abs[syn_sine_frequency_index-1] + fft_abs[syn_sine_frequency_index];
             float tmp1 = fft_abs[syn_sine_frequency_index];
             float tmp2 = std::accumulate(fft_abs.begin(), fft_abs.end(), 0.0) / (d_fft_size + 0.0);
-//            printf("tmp1 = %f\n", tmp1);
-//            printf("tmp2 = %f\n", tmp2);
+//           printf("tmp1 ==================================== %f\n", tmp1);
+//           printf("tmp2 ==================================== %f\n", tmp2);
             if (tmp1 / tmp2 > d_threshold) {
-//                std::cout << tmp1 << " " << tmp2 << " " << d_threshold << std::endl;
+//               std::cout << tmp1 << " " << tmp2 << " " << d_threshold << std::endl;
                 return true;
             }
             return false;
@@ -366,7 +366,7 @@ namespace gr {
                                              gr_vector_void_star &output_items)
         {
 
-//            std::cout << ninput_items[0] << " " << noutput_items << std::endl;
+//           std::cout << ninput_items[0] << " " << noutput_items << std::endl;
 
             // 本程序中每个item为一个gr_complex * fft_size大小的数据
             int ret = 0; // 记录消耗的item数目
@@ -380,16 +380,29 @@ namespace gr {
             }
 
             while (ret + d_fft_size <= input_items_num) {
+            //   std::cout<<"current ret="<<ret<<"d_fft_size="<<d_fft_size<<"input_items_num="<<input_items_num;
                 // 检测两端都是指定正弦波的数据, 并将其写入文件(清空之前的数据, 然后写入)
                 std::vector<float> first_fft_abs = do_fft(in);
                 if (detect_sine(first_fft_abs)) { // 如果第一段为正弦波, 并且文件中数据已经无效
-                    if (ret + 8512 > input_items_num) { // 如果剩余的item数目不够做第二段检波的fft, 那么就从第一次fft的开始处保留到下一次work
-//                    if (ret + 8512 - 1504 + d_fft_size > input_items_num) { // 如果剩余的item数目不够做第二段检波的fft, 那么就从第一次fft的开始处保留到下一次work
+                    printf("sine signal is detected-----ret=%d\n",ret);
+     //               if (ret + 8512 > input_items_num) { // 如果剩余的item数目不够做第二段检波的fft, 那么就从第一次fft的开始处保留到下一次work
+                    if ((ret + 8512 - 1504 + d_fft_size) > input_items_num) { // 如果剩余的item数目不够做第二段检波的fft, 那么就从第一次fft的开始处保留到下一次work
+//                        printf("ret=%d----,ret+8512 - 1504 + d_fft_size=%d,-----item numbers are not enough:%d\n",ret,(ret+8512-1504+ d_fft_size),input_items_num);
+                        std::cout<<"ret+8512 - 1504 + d_fft_size="<<(ret+8512 - 1504 + d_fft_size)<<"----------item numbers are not enough:"<<input_items_num<<std::endl;
                         break;
                     }
-                    std::vector<float> second_fft_abs = do_fft(in + 8512 - 1504);
+//                    printf("now printing the left data");
+//                    for(int ix=0;ix<7008;++ix,in+=1){
+//                        std::cout<<*in<<std::endl;
+//                    }
+                    std::vector<float> second_fft_abs = do_fft(in + (8512 - 1504));
+//                    printf("now printing the left data\n");
+//                    for(int i=0;i<second_fft_abs.size();i++)
+//                        std::cout<<second_fft_abs[i]<<std::endl;
+                    std::cout<<"syn_sine_frequency_index:"<<syn_sine_frequency_index<<"\n temp1="<<second_fft_abs[syn_sine_frequency_index]<<std::endl;
+                    std::cout<<"temp2="<<std::accumulate(second_fft_abs.begin(), second_fft_abs.end(), 0.0) / (d_fft_size + 0.0)<<std::endl;
                     if (detect_sine(second_fft_abs)) { // 如果第二段也还为正弦波, 则将这一段数据全部写入文件
-//                            printf("write data index = %d, write items num = %d, input_items_num = %d, ret = %d\n", cnt++, 8512 - 1504 + d_fft_size, input_items_num, ret);
+                        printf("write data index = %d, write items num = %d, input_items_num = %d, ret = %d\n", cnt++, 8512 - 1504 + d_fft_size, input_items_num, ret);
 
                         struct timeval timer;
                         gettimeofday(&timer, NULL);
@@ -430,7 +443,7 @@ namespace gr {
                         in = in + 8512;
                         ret += 8512;
                         break;
-                    }
+                    }else printf("second sine detect fail\n");
                 }
 
                 in = in + d_fft_size;

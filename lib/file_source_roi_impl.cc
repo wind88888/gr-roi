@@ -204,11 +204,11 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
+#endif//made from  modtool
 
 #include <gnuradio/thread/thread.h>
-#include "file_source_roi_impl.h"
-#include <gnuradio/io_signature.h>
+#include "file_source_roi_impl.h"//modtool
+#include <gnuradio/io_signature.h>//modtool
 #include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -248,7 +248,7 @@ namespace gr {
     }
 
     /*
-     * The private constructor
+         * The private constructor
      */
     file_source_roi_impl::file_source_roi_impl(size_t itemsize, const char *filename, bool tx_file)
       : gr::sync_block("file_source_roi",
@@ -259,6 +259,7 @@ namespace gr {
     {
         d_port = pmt::mp("msg_status_file");
         message_port_register_in(d_port);
+
         set_msg_handler(d_port, boost::bind(&file_source_roi_impl::msg_handler, this, _1));
 
         open(filename);
@@ -276,9 +277,11 @@ namespace gr {
 
       void file_source_roi_impl::msg_handler(pmt::pmt_t msg)
       {
+
           printf("***** MESSAGE DEBUG PRINT ********\n");
           pmt::pmt_t msg_ctl = pmt::car(msg);
-          bool status_file = pmt::dict_ref(msg_ctl, pmt::mp("status_file"), pmt::from_bool("false"));
+          bool status_file = pmt::to_bool(pmt::dict_ref(msg_ctl, pmt::mp("status_file"), pmt::from_bool("false")));
+          //bool status_file = pmt::dict_ref(msg_ctl, pmt::mp("status_file"), pmt::from_bool("false"));
           printf("status_file = %d\n", status_file);
           printf("**********************************\n");
           set_tx_file(status_file);
@@ -404,7 +407,7 @@ namespace gr {
 
           cnt++;
 
-          char *o = (char*)output_items[0];
+          char *o = (char*)output_items[0];//point to output buffer
           int i;
           int size = noutput_items;
 //          printf("tx_file = %d\n", tx_file);

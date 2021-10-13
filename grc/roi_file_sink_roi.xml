@@ -157,4 +157,9 @@
         <type>$type</type>
         <vlen>1</vlen>
     </sink>
+    <source>
+    	<name>msg_status_file</name>
+	<type>message</type>
+	<optional>1</optional>
+    </source>
 </block>
