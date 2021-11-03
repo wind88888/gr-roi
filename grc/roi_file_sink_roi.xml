@@ -1,165 +1,103 @@
 <?xml version="1.0"?>
 <block>
-    <name>File Sink Roi</name>
-    <key>roi_file_sink_roi</key>
-    <category>[ROI]</category>
-    <import>import roi</import>
-    <import>from gnuradio.fft import window</import>
-    <make>roi.file_sink_roi($file, $append, $sine_freq, $threshold, $fft_size, $forward, $window, $shift, $nthreads, $latency)
-<!--self.$(id).set_unbuffered($unbuffered)</make>-->
-    </make>
-    <callback>set_unbuffered($unbuffered)</callback>
-    <callback>open($file)</callback>
-    <param>
-        <name>File</name>
-        <key>file</key>
-        <value></value>
-        <type>file_save</type>
-    </param>
-    <!--<param>
-        <name>Input Type</name>
-        <key>type</key>
-        <type>enum</type>
-        <option>
-            <name>Complex</name>
-            <key>complex</key>
-            <opt>size:gr.sizeof_gr_complex</opt>
-        </option>
-        <option>
-            <name>Float</name>
-            <key>float</key>
-            <opt>size:gr.sizeof_float</opt>
-        </option>
-        <option>
-            <name>Int</name>
-            <key>int</key>
-            <opt>size:gr.sizeof_int</opt>
-        </option>
-        <option>
-            <name>Short</name>
-            <key>short</key>
-            <opt>size:gr.sizeof_short</opt>
-        </option>
-        <option>
-            <name>Byte</name>
-            <key>byte</key>
-            <opt>size:gr.sizeof_char</opt>
-        </option>
-    </param>-->
-    <param>
-        <name>Input Type</name>
-        <key>type</key>
-        <type>enum</type>
-        <option>
-            <name>Complex</name>
-            <key>complex</key>
-            <opt>hide_shift:</opt>
-        </option>
-        <option>
-            <name>Float</name>
-            <key>float</key>
-            <opt>hide_shift:all</opt>
-        </option>
-    </param>
-    <param>
-        <name>Unbuffered</name>
-        <key>unbuffered</key>
-        <value>False</value>
-        <type>bool</type>
-        <option>
-            <name>Off</name>
-            <key>False</key>
-        </option>
-        <option>
-            <name>On</name>
-            <key>True</key>
-        </option>
-    </param>
-    <param>
-        <name>Append file</name>
-        <key>append</key>
-        <value>False</value>
-        <type>bool</type>
-        <option>
-            <name>Append</name>
-            <key>True</key>
-        </option>
-        <option>
-            <name>Overwrite</name>
-            <key>False</key>
-        </option>
-    </param>
-    <param>
-        <name>Sine Freq</name>
-        <key>sine_freq</key>
-        <value>1</value>
-        <type>float</type>
-    </param>
-    <param>
-        <name>Threshold</name>
-        <key>threshold</key>
-        <value>1</value>
-        <type>float</type>
-    </param>
-    <param>
-        <name>FFT Size</name>
-        <key>fft_size</key>
-        <value>1024</value>
-        <type>int</type>
-    </param>
-    <param>
-        <name>Forward/Reverse</name>
-        <key>forward</key>
-        <type>enum</type>
-        <option>
-            <name>Forward</name>
-            <key>True</key>
-        </option>
-        <option>
-            <name>Reverse</name>
-            <key>False</key>
-        </option>
-    </param>
-    <param>
-        <name>Window</name>
-        <key>window</key>
-        <value>window.blackmanharris(1024)</value>
-        <type>real_vector</type>
-    </param>
-    <param>
-        <name>Shift</name>
-        <key>shift</key>
-        <type>enum</type>
-        <hide>$type.hide_shift</hide>
-        <option>
-            <name>Yes</name>
-            <key>True</key>
-        </option>
-        <option>
-            <name>No</name>
-            <key>False</key>
-        </option>
-    </param>
-    <param>
-        <name>Num. Threads</name>
-        <key>nthreads</key>
-        <value>1</value>
-        <type>int</type>
-    </param>
-    <param>
-        <name>Rev-Send. latency</name>
-        <key>latency</key>
-        <value>0</value>
-        <type>int</type>
-    </param>
-    <sink>
-        <name>in</name>
-        <type>$type</type>
-        <vlen>1</vlen>
-    </sink>
-    <source>
-    	<name>msg_status_file</name>
-	<type>message</type>
-	<optional>1</optional>
-    </source>
+  <name>File Sink Roi</name>
+  <key>roi_file_sink_roi</key>
+  <category>[ROI]</category>
+  <import>import roi</import>
+  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$proportion)</make>
+  <callback>set_unbuffered($unbuffered)</callback>
+  <callback>open($file)</callback>
+  <!-- Make one 'param' node for every Parameter you want settable from the GUI.
+       Sub-nodes:
+       * name
+       * key (makes the value accessible as $keyname, e.g. in the make node)
+       * type -->
+  <param>
+    <name>File</name>
+    <key>file</key>
+    <type>file_save</type>
+  </param>
+  <param>
+    <name>Input Type</name>
+    <key>type</key>
+    <type>enum</type>
+    <option>
+      <name>Complex</name>
+      <key>complex</key>
+      <opt>hide_shift:</opt>
+    </option>
+    <option>
+      <name>Float</name>
+      <key>float</key>
+      <opt>hide_shift:all</opt>
+    </option>
+  </param>
+  <param>
+    <name>Unbuffered</name>
+    <key>unbuffered</key>
+    <value>False</value>
+    <type>bool</type>
+    <option>
+      <name>Off</name>
+      <key>False</key>
+    </option>
+    <option>
+      <name>On</name>
+      <key>True</key>
+    </option>
+  </param>
+  <param>
+    <name>Append file</name>
+    <key>append</key>
+    <value>False</value>
+    <type>bool</type>
+    <option>
+      <name>Append</name>
+      <key>True</key>
+    </option>
+    <option>
+      <name>Overwrite</name>
+      <key>False</key>
+    </option>
+  </param>
+  <param>
+    <name>Cell_id</name>
+    <key>cell_id</key>
+    <value>1</value>
+    <type>int</type>
+  </param>
+  <param>
+    <name>Threshold</name>
+    <key>threshold</key>
+    <value>1</value>
+    <type>float</type>
+  </param>
+  <param>
+    <name>Proportion</name>
+    <key>proportion</key>
+    <value>1</value>
+    <type>float</type>
+  </param>
+
+  <!-- Make one 'sink' node per input. Sub-nodes:
+       * name (an identifier for the GUI)
+       * type
+       * vlen
+       * optional (set to 1 for optional inputs) -->
+  <sink>
+    <name>in</name>
+    <type>$type</type>
+    <vlen>1</vlen>
+  </sink>
+
+  <!-- Make one 'source' node per output. Sub-nodes:
+       * name (an identifier for the GUI)
+       * type
+       * vlen
+       * optional (set to 1 for optional inputs) -->
+  <source>
+    <name>msg_status_file</name>
+    <type>message</type>
+    <optional>1</optional>
+  </source>
 </block>
