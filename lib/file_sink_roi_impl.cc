@@ -37,16 +37,20 @@ namespace gr {
     namespace roi {
 
         file_sink_roi::sptr
-        file_sink_roi::make(const char* filename, bool append, int cell_id,float threshold,float proportion) {
+        file_sink_roi::make(const char* filename, bool append, int cell_id,float threshold,float proportion,
+                            int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,//used for fft
+                            float energe
+        )
+        {
             return gnuradio::get_initial_sptr
-                    (new file_sink_roi_impl(filename, append,cell_id, threshold,proportion));
+                    (new file_sink_roi_impl(filename, append,cell_id, threshold,proportion, fft_size, forward, window, shift, nthreads,energe));
         }
 
 
         /*
          * The private constructor
          */
-        file_sink_roi_impl::file_sink_roi_impl(const char* filename, bool append, int cell_id,float threshold,float proportion)
+        file_sink_roi_impl::file_sink_roi_impl(const char* filename, bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe)
                 : gr::block("file_sink_roi",
                             gr::io_signature::make(1, 1, sizeof(gr_complex)),
                             gr::io_signature::make(0, 0, 0)) ,
@@ -54,11 +58,21 @@ namespace gr {
                   status_file(false),
                   d_threshold(threshold),
                   d_cell_id(cell_id),
-                  d_proportion(proportion)
+                  d_proportion(proportion),
+                  d_fft_size(fft_size),
+                  d_forward(forward),
+                  d_shift(shift),
+                  d_energe(energe)
                   {
                       set_relative_rate(1.0 / 9000);
                       d_port = pmt::mp("msg_status_file");
                       message_port_register_out(d_port);
+
+                      std::cout<<"threshold = "<<d_threshold<<"proportion = "<<d_proportion<<"fft_size="<<d_fft_size<<std::endl;
+                      d_fft = new fft_complex(d_fft_size, forward, nthreads);
+                      if (!set_window(window)) {
+                          throw std::runtime_error("fft_vcc: window not the same length as fft_size\n");
+                      }
         }
         std::vector<float> file_sink_roi_impl::xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data){
             gr_complex *input = new gr_complex[num_input+num_data];
@@ -75,7 +89,7 @@ namespace gr {
             for(int i=0;i<num_input;i++)
             {
                 for(int j=0;j<num_data;j++)
-                    output[i]=output[i]+input[i+j]*data[j];
+                    output[i]=output[i]+conj(input[i+j])*data[j];
             }
             delete [] input;
             std::vector<float>output_abs(num_input);
@@ -87,6 +101,9 @@ namespace gr {
             return output_abs;
 
         }
+
+
+
         void file_sink_roi_impl::find_max(std::vector<float>  output_abs,int &maxindex){
             int len=output_abs.size();
 //            printf("len=%d,doing find_maxtwo\n",len);
@@ -131,6 +148,82 @@ namespace gr {
                 printf("send message end\n");
             }
 
+        bool file_sink_roi_impl::set_window(const std::vector<float> &window) {
+            if (window.size() == 0 || window.size() == d_fft_size) {
+                d_window = window;
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        std::vector<float> file_sink_roi_impl::do_fft(const gr_complex *in) {
+            // 处理fft的输入
+            if (d_window.size()) {
+                gr_complex *dst = d_fft->get_inbuf();
+                if (!d_forward && d_shift) {
+                    unsigned int offset = (!d_forward && d_shift)?(d_fft_size/2):0;
+                    int fft_m_offset = d_fft_size - offset;
+                    volk_32fc_32f_multiply_32fc(&dst[fft_m_offset], &in[0], &d_window[0], offset);
+                    volk_32fc_32f_multiply_32fc(&dst[0], &in[offset], &d_window[offset], d_fft_size-offset);
+                } else {
+                    volk_32fc_32f_multiply_32fc(&dst[0], in, &d_window[0], d_fft_size);
+                }
+            } else {
+                if(!d_forward && d_shift) {  // apply an ifft shift on the data
+                    gr_complex *dst = d_fft->get_inbuf();
+                    unsigned int len = (unsigned int)(floor(d_fft_size/2.0)); // half length of complex array
+                    memcpy(&dst[0], &in[len], sizeof(gr_complex)*(d_fft_size - len));
+                    memcpy(&dst[d_fft_size - len], &in[0], sizeof(gr_complex)*len);
+                }
+                else {
+                    memcpy(d_fft->get_inbuf(), in, sizeof(gr_complex) * d_fft_size);
+                }
+            }
+
+            d_fft->execute(); // 计算fft
+
+            // 获取输出
+            gr_complex *fft_output = new gr_complex[d_fft_size];
+            if(d_forward && d_shift) {  // apply a fft shift on the data
+                unsigned int len = (unsigned int)(ceil(d_fft_size/2.0));
+                memcpy(&fft_output[0], &d_fft->get_outbuf()[len], sizeof(gr_complex)*(d_fft_size - len));
+                memcpy(&fft_output[d_fft_size - len], &d_fft->get_outbuf()[0], sizeof(gr_complex)*len);
+            }
+            else {
+                memcpy (fft_output, d_fft->get_outbuf (), sizeof(gr_complex) * d_fft_size);
+            }
+
+            // 将输出的结果取模
+            // detect whether res is sine or not
+            std::vector<float> fft_abs;
+            for (int i=0;i<d_fft_size;i++) {
+                fft_abs.push_back(sqrt(pow((fft_output+i)->real(), 2) + pow((fft_output+i)->imag(), 2)));
+            }
+
+            delete fft_output; // 销毁并回收内存
+
+            return fft_abs;
+        }
+        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs,const float * detect_window) {
+            float sum_signal=0.0;
+            float sum_noise=0.0;
+            float sum_window=0.0;
+        for(int i=0;i<d_fft_size;i++){
+            sum_signal+=fft_abs[i]*detect_window[i];
+            sum_noise-=fft_abs[i]*(detect_window[i]-1);
+        }
+        for(int i=0;i<d_fft_size;i++)
+            sum_window+=detect_window[i];
+        sum_signal=sum_signal/sum_window;
+        sum_noise=sum_noise/(d_fft_size-sum_window);
+
+        float snr_ratio=sum_signal/sum_noise;
+        if(snr_ratio>d_energe){return true;}
+
+        return false;
+        }
+
 
             int
             file_sink_roi_impl::general_work(int noutput_items,
@@ -138,58 +231,78 @@ namespace gr {
                                                  gr_vector_const_void_star &input_items,
                                                  gr_vector_void_star &output_items) {
             int ret=0;// 记录消耗的item数目
+            int First_Detection=0;
             int input_items_num=ninput_items[0];
-            std::cout<<"input_items_num="<<input_items_num<<"ret="<<ret<<std::endl;
-            std::cout<<"threshold = "<<d_threshold<<"proportion = "<<d_proportion<<std::endl;
+//            std::cout<<"input_items_num="<<input_items_num<<"ret="<<ret<<std::endl;
+
 //                printf("ret=%d\n",ret);
 
             const gr_complex *in = (const gr_complex *) input_items[0];
 
+            FILE * fwindow;
+            fwindow= fopen("/home/alex/ROI/data/corr_data/PSBCH_FFT_Template", "rb");
+            if (fwindow == NULL)  return noutput_items;
+            float detect_window[d_fft_size]={0};
+            fread(detect_window,sizeof(float),d_fft_size,fwindow);
 
-                FILE* fp;
-//                printf("file read begin\n");
-                fp=fopen("/home/alex/ROI/data/corr_data/Test_Out_Data_1","rb");
-                if(fp==NULL) return noutput_items;
-//                printf("file read success\n");
+                while (ret + d_fft_size <= input_items_num) {
+                    std::vector<float> first_fft_abs = do_fft(in);
+                    if (detect_energe(first_fft_abs,detect_window)) {
+//                        if(!corr_start){
+                        First_Detection++;
+                        printf("signal may start at ret=%d,First_Detection=%d\n",ret,First_Detection);
+                        if(First_Detection==3||corr_start) {
+                            printf("signal start at ret = %d\n", ret);
+                            if ((ret + 6592 - d_fft_size * 2) > input_items_num && !corr_start) {
+                                ret = ret - d_fft_size * 2;
+                                printf("left data is not enough\n");
+                                corr_start = true;
+                                break;
+                            }
+                            if(!corr_start) {
+                                ret = ret - d_fft_size * 2;
+                                in = in - d_fft_size * 2;
+                            }
+
+                            FILE *fp;
+                            fp = fopen("/home/alex/ROI/data/corr_data/Test_Out_Data_1", "rb");
+                            if (fp == NULL) return noutput_items;
+                            gr_complex data[NUM] = {0};
+                            fread(data, sizeof(gr_complex), NUM, fp);
 
 
-                gr_complex data[NUM]= {0};
-
-                fread(data,sizeof(gr_complex),NUM,fp);
-//                printf("fread success\n");
-                while(ret<input_items_num) {
-                    std::vector<float> output_abs = xcorr(in, data, input_items_num, NUM);
-
-
-                    int maxindex;//存入最大的索引值
-                    int max_left=0,max_right=0;
-                    int begin_index=0;
-                    bool pss_found=false;
-                    find_max(output_abs, maxindex);
-                    std::cout << "the bigest at index " <<maxindex << "with output" <<output_abs[maxindex] << std::endl;
+                            std::vector<float> output_abs = xcorr(in, data, input_items_num - ret, NUM);
+                            int maxindex;//存入最大的索引值
+                            int max_left = 0, max_right = 0;
+                            int begin_index = 0;
+                            bool pss_found = false;
+                            find_max(output_abs, maxindex);
+                            std::cout << "the bigest at index " << maxindex << "with output" << output_abs[maxindex]
+                                      << std::endl;
 //                    printf("abs compute success\n");
-                    if (output_abs[maxindex]>=d_threshold) {
-                        max_left=(maxindex-PSS_LEN)>0?(maxindex-PSS_LEN):-1;
-                        max_right=(maxindex+PSS_LEN)<input_items_num?(maxindex+PSS_LEN):-1;
-                        if(max_left!=-1&&max_right!=-1){
-                            if(output_abs[max_left]>output_abs[maxindex]*d_proportion){
-                                pss_found= true;
-                                begin_index=max_left;
-                            }else if(output_abs[max_right]>output_abs[maxindex]*d_proportion){
-                                pss_found= true;
-                                begin_index=maxindex;
-                            }
-                        }else if(max_left==-1){
-                            if(output_abs[max_right]>output_abs[maxindex]*d_proportion){
-                                pss_found=true;
-                                begin_index=maxindex;
-                            }
-                        }else if(max_right==-1){
-                            if(output_abs[max_left]>output_abs[maxindex]*d_proportion){
-                                pss_found= true;
-                                begin_index=max_left;
-                            }
-                        }
+                            if (output_abs[maxindex] >= d_threshold) {
+
+                                max_left = (maxindex - PSS_LEN) > 0 ? (maxindex - PSS_LEN) : -1;
+                                max_right = (maxindex + PSS_LEN) < input_items_num ? (maxindex + PSS_LEN) : -1;
+                                if (max_left != -1 && max_right != -1) {
+                                    if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
+                                        pss_found = true;
+                                        begin_index = max_left;
+                                    } else if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
+                                        pss_found = true;
+                                        begin_index = maxindex;
+                                    }
+                                } else if (max_left == -1) {
+                                    if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
+                                        pss_found = true;
+                                        begin_index = maxindex;
+                                    }
+                                } else if (max_right == -1) {
+                                    if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
+                                        pss_found = true;
+                                        begin_index = max_left;
+                                    }
+                                }
 
 //                        std::cout<<"maxindex="<<maxindex<<"with output:"<<output_abs[maxindex]<<std::endl;
 //                        if ((maxindex < NUM) && ((maxindex + NUM) < input_items_num)) {
@@ -212,56 +325,70 @@ namespace gr {
 //                                max_left=maxindex-NUM;
 //                            }
 //                        }
-                    }
-                    if(pss_found){
-                        printf("PSS sequences have been found\n");
+                            }
+                            if (pss_found) {
+                                printf("PSS sequences have been found\n");
 
-                        std::cout << "the pss begin at index " <<begin_index << "with output" <<output_abs[begin_index] << std::endl;
+                                std::cout << "the pss begin at index " << begin_index << "with output"
+                                          << output_abs[begin_index] << std::endl;
 //                       std::cout << "the pss begin at index " <<maxindex << "with output" <<output_abs[maxindex] << std::endl;
-                        printf(" write items num = %d, input_items_num = %d, ret = %d\n", NUM, input_items_num, ret);
-                        struct timeval timer;
-                        gettimeofday(&timer, NULL);
-                        std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us" << std::endl;
-                        gr::thread::scoped_lock lock(mutex);
-                        do_update();
-                        if (!d_fp)
-                            return noutput_items;
+                                printf(" write items num = %d, input_items_num = %d, ret = %d\n", NUM,
+                                       input_items_num,
+                                       ret);
+                                struct timeval timer;
+                                gettimeofday(&timer, NULL);
+                                std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us"
+                                          << std::endl;
+                                gr::thread::scoped_lock lock(mutex);
+                                do_update();
+                                if (!d_fp)
+                                    return noutput_items;
 
-                        // 先清空文件
-                        ftruncate(fileno(d_fp), 0);
-                        rewind(d_fp);
+                                // 先清空文件
+                                ftruncate(fileno(d_fp), 0);
+                                rewind(d_fp);
 
 //                        int t_size = fwrite(in, sizeof(gr_complex), 8512 - 1504 + d_fft_size, d_fp);
-                        int t_size = fwrite(in + begin_index, sizeof(gr_complex), NUM, d_fp);
+                                int t_size = fwrite(in + begin_index, sizeof(gr_complex), NUM, d_fp);
 //                        int t_size = fwrite(in + maxindex, sizeof(gr_complex), NUM, d_fp);
-                        rewind(d_fp);
+                                rewind(d_fp);
 
 //                            printf("written data size = %d, file size = %d\n", t_size, file_size);
 
-                        status_file = true;
-                        send_message();
-                        if (ferror(d_fp)) {
-                            std::stringstream s;
-                            s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
-                            throw std::runtime_error(s.str());
+                                status_file = true;
+                                send_message();
+                                if (ferror(d_fp)) {
+                                    std::stringstream s;
+                                    s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
+                                    throw std::runtime_error(s.str());
+                                }
+
+                                if (d_unbuffered) fflush(d_fp);
+                                corr_start=false;
+                                ret = input_items_num;
+                                break;
+
+                            }else{
+                                printf("PSS not found\n");
+                                First_Detection=0;
+                                corr_start=false;
+                                ret += d_fft_size*2;
+                            }
+
                         }
 
-                        if (d_unbuffered) fflush(d_fp);
+                    }else{First_Detection=0;
+                        corr_start=false;
+                        if(corr_start)
+                            printf("corr_start = true ,error occured!\n");}
 
-                        ret += input_items_num;
-
-                    }
-                    printf("PSS not found\n");
-                    if (input_items_num >= (PSS_LEN * 2)) {
-                        ret += (input_items_num - PSS_LEN * 2);
-                    }
-                    ret += input_items_num;
+                    in = in + d_fft_size;
+                    ret += d_fft_size;
                 }
 
 
-
-
-
+//                cnt++;
+//                printf("*************cnt=%d*********\n",cnt);
 
 
                 // Do <+signal processing+>

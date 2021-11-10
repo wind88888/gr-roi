@@ -48,6 +48,16 @@ namespace gr {
         int d_cell_id;
         float d_proportion;
 
+        fft_complex *d_fft;
+        unsigned int d_fft_size;
+        bool d_forward;
+        bool d_shift;
+        std::vector<float> d_window;
+
+        float d_energe;
+
+        bool corr_start=false;
+
         int cnt=0;
 
         pmt::pmt_t d_port;
@@ -55,7 +65,7 @@ namespace gr {
         int d_latency;
 
      public:
-        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,float proportion);
+        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe);
       ~file_sink_roi_impl();
 
       // Where all the action really happens
@@ -70,6 +80,11 @@ namespace gr {
         void send_message();
         std::vector<float> xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data);
         void find_max(std::vector<float>  output_abs,int &maxindex);
+
+          bool set_window(const std::vector<float> &window);
+        std::vector<float> do_fft(const gr_complex *in);
+        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
+
         int general_work(int noutput_items,
            gr_vector_int &ninput_items,
            gr_vector_const_void_star &input_items,

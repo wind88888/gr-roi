@@ -4,7 +4,8 @@
   <key>roi_file_sink_roi</key>
   <category>[ROI]</category>
   <import>import roi</import>
-  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$proportion)</make>
+  <import>from gnuradio.fft import window</import>
+  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$proportion, $fft_size, $forward, $window, $shift, $nthreads,$energe)</make>
   <callback>set_unbuffered($unbuffered)</callback>
   <callback>open($file)</callback>
   <!-- Make one 'param' node for every Parameter you want settable from the GUI.
@@ -73,10 +74,61 @@
     <type>float</type>
   </param>
   <param>
+    <name>Energe_Thre</name>
+    <key>energe</key>
+    <value>1</value>
+    <type>float</type>
+  </param>
+  <param>
     <name>Proportion</name>
     <key>proportion</key>
     <value>1</value>
     <type>float</type>
+  </param>
+  <param>
+    <name>FFT Size</name>
+    <key>fft_size</key>
+    <value>1024</value>
+    <type>int</type>
+  </param>
+  <param>
+    <name>Forward/Reverse</name>
+    <key>forward</key>
+    <type>enum</type>
+    <option>
+      <name>Forward</name>
+      <key>True</key>
+    </option>
+    <option>
+      <name>Reverse</name>
+      <key>False</key>
+    </option>
+  </param>
+  <param>
+    <name>Window</name>
+    <key>window</key>
+    <value>window.blackmanharris(1024)</value>
+    <type>real_vector</type>
+  </param>
+  <param>
+    <name>Shift</name>
+    <key>shift</key>
+    <type>enum</type>
+    <hide>$type.hide_shift</hide>
+    <option>
+      <name>Yes</name>
+      <key>True</key>
+    </option>
+    <option>
+      <name>No</name>
+      <key>False</key>
+    </option>
+  </param>
+  <param>
+    <name>Num. Threads</name>
+    <key>nthreads</key>
+    <value>1</value>
+    <type>int</type>
   </param>
 
   <!-- Make one 'sink' node per input. Sub-nodes:
