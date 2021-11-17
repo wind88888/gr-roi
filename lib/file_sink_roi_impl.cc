@@ -339,11 +339,10 @@ namespace gr {
 //            float tmp1 = fft_abs[syn_sine_frequency_index+1] + fft_abs[syn_sine_frequency_index-1] + fft_abs[syn_sine_frequency_index];
             float tmp1 = fft_abs[syn_sine_frequency_index];
             float tmp2 = std::accumulate(fft_abs.begin(), fft_abs.end(), 0.0) / (d_fft_size + 0.0);
-//            printf("tmp1 = %f\n", tmp1);
-//            printf("tmp2 = %f\n", tmp2);
-//            printf("tmp1 / tmp2 ======================================11111111======================= %f\n", tmp1 / tmp2);
+            printf("tmp1 = %f\n", tmp1);
+            printf("tmp2 = %f\n", tmp2);
             if (tmp1 / tmp2 > d_threshold) {
-                printf("tmp1 / tmp2 ==================================222=2=22222222222222222========================= %f\n", tmp1 / tmp2);
+                printf("tmp1 / tmp2 ============================================================= %f\n", tmp1 / tmp2);
                 return true;
             }
             return false;
