@@ -39,22 +39,23 @@ namespace gr {
         file_sink_roi::sptr
         file_sink_roi::make(const char* filename, bool append, int cell_id,float threshold,float proportion,
                             int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,//used for fft
-                            float energe
+                            float energe,int latency,int time_slot
         )
         {
             return gnuradio::get_initial_sptr
-                    (new file_sink_roi_impl(filename, append,cell_id, threshold,proportion, fft_size, forward, window, shift, nthreads,energe));
+                    (new file_sink_roi_impl(filename, append,cell_id, threshold,proportion, fft_size, forward, window, shift, nthreads,energe,latency,time_slot));
         }
 
 
         /*
          * The private constructor
          */
-        file_sink_roi_impl::file_sink_roi_impl(const char* filename, bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe)
+        file_sink_roi_impl::file_sink_roi_impl(const char* filename, bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot)
                 : gr::block("file_sink_roi",
                             gr::io_signature::make(1, 1, sizeof(gr_complex)),
                             gr::io_signature::make(0, 0, 0)) ,
                   file_sink_base(filename, true, append),
+                  d_latency(latency),
                   status_file(false),
                   d_threshold(threshold),
                   d_cell_id(cell_id),
@@ -62,7 +63,8 @@ namespace gr {
                   d_fft_size(fft_size),
                   d_forward(forward),
                   d_shift(shift),
-                  d_energe(energe)
+                  d_energe(energe),
+                  d_timeslot(time_slot)
                   {
                       set_relative_rate(1.0 / 9000);
                       d_port = pmt::mp("msg_status_file");
@@ -205,27 +207,42 @@ namespace gr {
 
             return fft_abs;
         }
-        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs,const float * detect_window) {
+        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs) {
             float sum_signal=0.0;
             float sum_noise=0.0;
-            float sum_window=0.0;
-        for(int i=0;i<d_fft_size;i++){
-            sum_signal+=fft_abs[i]*detect_window[i];
-            sum_noise-=fft_abs[i]*(detect_window[i]-1);
+            float sum_window=18.0;
+            for(int i=0;i<18;i++){
+                sum_signal+=fft_abs[i];
+            }
+            for(int i=18;i<512;i++){
+                sum_noise+=fft_abs[i];
+            }
+
+
+            sum_signal=sum_signal/sum_window;
+            sum_noise=sum_noise/(d_fft_size/2-sum_window);
+
+            float snr_ratio=sum_signal/sum_noise;
+//            printf("snr_ratio = %f", snr_ratio);
+
+            if(snr_ratio>d_energe){
+                return true;}
+
+            return false;
         }
-        for(int i=0;i<d_fft_size;i++)
-            sum_window+=detect_window[i];
-        sum_signal=sum_signal/sum_window;
-        sum_noise=sum_noise/(d_fft_size-sum_window);
 
-        float snr_ratio=sum_signal/sum_noise;
-        if(snr_ratio>d_energe){return true;}
+//        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs){
+//            float sum_signal=0.0;
+//            for(int i=0;i<28;i++)
+//                sum_signal+=fft_abs[i];
+//
+////            printf("sum_signal=%f",sum_signal);
+//            if(sum_signal>d_energe)
+//                return true;
+//            return false;
+//        }
 
-        return false;
-        }
-
-
-            int
+        int
             file_sink_roi_impl::general_work(int noutput_items,
                                                  gr_vector_int &ninput_items,
                                                  gr_vector_const_void_star &input_items,
@@ -239,19 +256,108 @@ namespace gr {
 
             const gr_complex *in = (const gr_complex *) input_items[0];
 
-            FILE * fwindow;
-            fwindow= fopen("/home/alex/ROI/data/corr_data/PSBCH_FFT_Template", "rb");
-            if (fwindow == NULL)  return noutput_items;
-            float detect_window[d_fft_size]={0};
-            fread(detect_window,sizeof(float),d_fft_size,fwindow);
+
+           switch(d_save_status){
+               case 1:
+                   printf("now start to save PSSCH, %d/%d items have been saved",cnt,PSSCH_LEN);
+
+                   struct timeval timer;
+                   gettimeofday(&timer, NULL);
+                   std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us"
+                   << std::endl;
+//                   gr::thread::scoped_lock lock(mutex);
+                   do_update();
+                   if(!d_fp)
+                    return noutput_items;
+                   if(cnt==0){
+                       ftruncate(fileno(d_fp), 0);
+                       rewind(d_fp);
+                   }
+
+                if(cnt+input_items_num<=PSSCH_LEN) {
+                    while (ret<input_items_num) {
+                        int count = fwrite(in, sizeof(gr_complex), input_items_num-ret, d_fp);
+                        if (count == 0) {
+                            if (ferror(d_fp)) {
+                                std::stringstream s;
+                                s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
+                                throw std::runtime_error(s.str());
+                            } else { // is EOF
+                                break;
+                            }
+                        }
+                        ret += count;
+                        in += count;
+                        cnt+=count;
+                    }
+                    if(cnt==PSSCH_LEN){
+                        printf("PSSCH has been saved, items number =%d \n",cnt);
+                        d_save_status=-1;
+                        cnt=0;
+                    }
+
+                }else{
+                    int count = fwrite(in, sizeof(gr_complex), PSSCH_LEN-cnt, d_fp);
+                    if (count == 0) {
+                        if (ferror(d_fp)) {
+                            std::stringstream s;
+                            s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
+                            throw std::runtime_error(s.str());
+                        } else { // is EOF
+                            break;
+                        }
+                    }
+                    ret += count;
+                    in += count;
+                    cnt+=count;
+                    printf("PSSCH has been saved, saved items number =%d \n",cnt);
+                    d_save_status=-1;
+                    cnt=0;
+                }
+
+                if(d_unbuffered)
+                    fflush (d_fp);
+                break;
+
+
+            case 0:
+                  printf("waiting for the arrival of %d time_slot\n",d_timeslot);
+                  if(d_waitslot+input_items_num<=(PSSCH_LEN-2048-160)){
+                      ret=input_items_num;
+                      d_waitslot+=input_items_num;
+                      if(d_waitslot==(PSSCH_LEN-2048-160))
+                          printf("PSBCH over\n");
+                  }else if(d_waitslot+input_items_num<=(d_timeslot*PSSCH_LEN+PSSCH_LEN-2048-160)){
+                      if(d_waitslot<(PSSCH_LEN-2048-160))
+                          printf("PSBCH over\n");
+                      ret=input_items_num;
+                      d_waitslot+=input_items_num;
+                      if(d_waitslot==(d_timeslot*PSSCH_LEN+PSSCH_LEN-2048-160)){
+                          printf("timeslot arrived\n");
+                          d_save_status=1;
+                      }
+                  }else{
+                      printf("timeslot arrived\n");
+                      ret=d_timeslot*PSSCH_LEN+PSSCH_LEN-2048-160-d_waitslot;
+                      d_save_status=1;
+                  }
+                  break;
+            case -1 :
+
+
+//                FILE *fwindow;
+//                fwindow = fopen("/home/alex/ROI/data/corr_data/PSBCH_FFT_Template", "rb");
+//                if (fwindow == NULL) return noutput_items;
+//                float detect_window[d_fft_size] = {0};
+//                fread(detect_window, sizeof(float), d_fft_size, fwindow);
 
                 while (ret + d_fft_size <= input_items_num) {
                     std::vector<float> first_fft_abs = do_fft(in);
-                    if (detect_energe(first_fft_abs,detect_window)) {
-//                        if(!corr_start){
+//                    printf("detect_energedetect_energedetect_energedetect_energedetect_energe");
+                    if (detect_energe(first_fft_abs)) {
                         First_Detection++;
-                        printf("signal may start at ret=%d,First_Detection=%d\n",ret,First_Detection);
-                        if(First_Detection==3||corr_start) {
+                        printf("signal may start at ret=%d,First_Detection=%d\n", ret, First_Detection);
+                        if (First_Detection == 3 || corr_start) {
                             printf("signal start at ret = %d\n", ret);
                             if ((ret + 6592 - d_fft_size * 2) > input_items_num && !corr_start) {
                                 ret = ret - d_fft_size * 2;
@@ -259,7 +365,7 @@ namespace gr {
                                 corr_start = true;
                                 break;
                             }
-                            if(!corr_start) {
+                            if (!corr_start) {
                                 ret = ret - d_fft_size * 2;
                                 in = in - d_fft_size * 2;
                             }
@@ -304,91 +410,69 @@ namespace gr {
                                     }
                                 }
 
-//                        std::cout<<"maxindex="<<maxindex<<"with output:"<<output_abs[maxindex]<<std::endl;
-//                        if ((maxindex < NUM) && ((maxindex + NUM) < input_items_num)) {
-//                            if(output_abs[maxindex+NUM]>=(output_abs[maxindex]*d_proportion){
-//                                pss_found= true;
-//                                max_right=maxindex+NUM;
-//                            }
-//
-//                        } else if((maxindex+NUM)>input_items_num){
-//                            if(output_abs[maxindex-NUM]>=(output_abs[maxindex]*d_proportion)) {
-//                                pss_found = true;
-//                                max_left=maxindex-NUM;
-//                            }
-//                        }else{
-//                            if((output_abs[maxindex+NUM]>=output_abs[maxindex-NUM])&&(output_abs[maxindex+NUM]>=(output_abs[maxindex]*d_proportion))){
-//                                pss_found = true;
-//                                max_right=maxindex+NUM;
-//                            }else if(output_abs[maxindex-NUM]>=(output_abs[maxindex]*d_proportions)){
-//                                pss_found = true;
-//                                max_left=maxindex-NUM;
-//                            }
-//                        }
                             }
                             if (pss_found) {
                                 printf("PSS sequences have been found\n");
 
                                 std::cout << "the pss begin at index " << begin_index << "with output"
                                           << output_abs[begin_index] << std::endl;
-//                       std::cout << "the pss begin at index " <<maxindex << "with output" <<output_abs[maxindex] << std::endl;
-                                printf(" write items num = %d, input_items_num = %d, ret = %d\n", NUM,
-                                       input_items_num,
-                                       ret);
-                                struct timeval timer;
-                                gettimeofday(&timer, NULL);
-                                std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us"
-                                          << std::endl;
-                                gr::thread::scoped_lock lock(mutex);
-                                do_update();
-                                if (!d_fp)
-                                    return noutput_items;
 
-                                // 先清空文件
-                                ftruncate(fileno(d_fp), 0);
-                                rewind(d_fp);
-
-//                        int t_size = fwrite(in, sizeof(gr_complex), 8512 - 1504 + d_fft_size, d_fp);
-                                int t_size = fwrite(in + begin_index, sizeof(gr_complex), NUM, d_fp);
-//                        int t_size = fwrite(in + maxindex, sizeof(gr_complex), NUM, d_fp);
-                                rewind(d_fp);
-
-//                            printf("written data size = %d, file size = %d\n", t_size, file_size);
-
-                                status_file = true;
-                                send_message();
-                                if (ferror(d_fp)) {
-                                    std::stringstream s;
-                                    s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
-                                    throw std::runtime_error(s.str());
-                                }
-
-                                if (d_unbuffered) fflush(d_fp);
-                                corr_start=false;
-                                ret = input_items_num;
+//                                printf(" write items num = %d, input_items_num = %d, ret = %d\n", NUM,
+//                                       input_items_num,
+//                                       ret);
+//                                struct timeval timer;
+//                                gettimeofday(&timer, NULL);
+//                                std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us"
+//                                          << std::endl;
+//                                gr::thread::scoped_lock lock(mutex);
+//                                do_update();
+//                                if (!d_fp)
+//                                    return noutput_items;
+//                                // 先清空文件
+//                                ftruncate(fileno(d_fp), 0);
+//                                rewind(d_fp);
+//
+//                                int t_size = fwrite(in + begin_index, sizeof(gr_complex), NUM, d_fp);
+//                                rewind(d_fp);
+//
+//                                if(d_latency > 0) usleep(d_latency);
+//                                status_file = true;
+//                                send_message();
+//                                if (ferror(d_fp)) {
+//                                    std::stringstream s;
+//                                    s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
+//                                    throw std::runtime_error(s.str());
+//                                }
+//
+//                                if (d_unbuffered) fflush(d_fp);
+                                d_save_status=0;
+                                corr_start = false;
+                                ret += begin_index;
                                 break;
 
-                            }else{
+                            } else {
                                 printf("PSS not found\n");
-                                First_Detection=0;
-                                corr_start=false;
-                                ret += d_fft_size*2;
+                                First_Detection = 0;
+                                d_save_status=-1;
+                                corr_start = false;
+                                ret += d_fft_size * 2;
                             }
 
                         }
 
-                    }else{First_Detection=0;
-                        corr_start=false;
-                        if(corr_start)
-                            printf("corr_start = true ,error occured!\n");}
+                    } else {
+                        First_Detection = 0;
+                        corr_start = false;
+                        if (corr_start)
+                            printf("corr_start = true ,error occured!\n");
+                    }
 
                     in = in + d_fft_size;
                     ret += d_fft_size;
                 }
+                break;
+            }
 
-
-//                cnt++;
-//                printf("*************cnt=%d*********\n",cnt);
 
 
                 // Do <+signal processing+>

@@ -5,7 +5,7 @@
   <category>[ROI]</category>
   <import>import roi</import>
   <import>from gnuradio.fft import window</import>
-  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$proportion, $fft_size, $forward, $window, $shift, $nthreads,$energe)</make>
+  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$proportion, $fft_size, $forward, $window, $shift, $nthreads,$energe,$latency,$time_slot)</make>
   <callback>set_unbuffered($unbuffered)</callback>
   <callback>open($file)</callback>
   <!-- Make one 'param' node for every Parameter you want settable from the GUI.
@@ -127,6 +127,18 @@
   <param>
     <name>Num. Threads</name>
     <key>nthreads</key>
+    <value>1</value>
+    <type>int</type>
+  </param>
+  <param>
+    <name>Rev-Send. latency</name>
+    <key>latency</key>
+    <value>0</value>
+    <type>int</type>
+  </param>
+  <param>
+    <name>TimeSlot</name>
+    <key>time_slot</key>
     <value>1</value>
     <type>int</type>
   </param>

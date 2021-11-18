@@ -36,6 +36,7 @@ namespace gr {
         typedef gr::fft::fft_complex fft_complex;
         const int NUM=2192;
         const int PSS_LEN=2192;
+        const int PSSCH_LEN=30720;
 
     private:
 
@@ -44,9 +45,12 @@ namespace gr {
 
 
         bool status_file; // 标识文件中数据是否有效
-        float d_threshold;
-        int d_cell_id;
-        float d_proportion;
+        float d_threshold;//PSSS相关阈值
+        int d_cell_id;//cell_id
+
+        float d_energe;//能量检测阈值
+        bool corr_start=false;//是否进行相关
+        float d_proportion;//相关次峰与主峰的比例
 
         fft_complex *d_fft;
         unsigned int d_fft_size;
@@ -54,18 +58,19 @@ namespace gr {
         bool d_shift;
         std::vector<float> d_window;
 
-        float d_energe;
 
-        bool corr_start=false;
-
+        int d_waitslot=0;//用来计数等待的点数以对应时隙
+        int d_timeslot;
         int cnt=0;
+        int d_save_status=-1;//-1 for no pss has been found;0 for pss has been found ,wait for PSSCH;1 for PSSCH saving.
 
         pmt::pmt_t d_port;
 
-        int d_latency;
+        int d_latency;//收发转换间隔
+
 
      public:
-        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe);
+        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot);
       ~file_sink_roi_impl();
 
       // Where all the action really happens
@@ -83,8 +88,8 @@ namespace gr {
 
           bool set_window(const std::vector<float> &window);
         std::vector<float> do_fft(const gr_complex *in);
-        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
-
+//        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
+          bool detect_energe(const std::vector<float> &fft_abs);
         int general_work(int noutput_items,
            gr_vector_int &ninput_items,
            gr_vector_const_void_star &input_items,
