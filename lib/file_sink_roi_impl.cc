@@ -77,25 +77,26 @@ namespace gr {
                       }
         }
         std::vector<float> file_sink_roi_impl::xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data){
-            gr_complex *input = new gr_complex[num_input+num_data];
+//            gr_complex *input = new gr_complex[num_input+num_data];
 //            printf("doing xcorr\n");
-            for(int i=0;i<(num_input+num_data);i++)
-            {
-                if(i<num_input){
-                    input[i]=in[i];
-                }else{
-                    input[i]=0;
-                }
-            }
-            std::vector<gr_complex> output(num_input);
-            for(int i=0;i<num_input;i++)
+//            for(int i=0;i<(num_input+num_data);i++)
+//            {
+//                if(i<num_input){
+//                    input[i]=in[i];
+//                }else{
+//                    input[i]=0;
+//                }
+//            }
+            std::vector<gr_complex> output(num_input-num_data);
+            for(int i=0;i<(num_input-num_data);i++)
+//                for(int i=0;i<(num_input);i++)
             {
                 for(int j=0;j<num_data;j++)
-                    output[i]=output[i]+conj(input[i+j])*data[j];
+                    output[i]=output[i]+conj(in[i+j])*data[j];
             }
-            delete [] input;
-            std::vector<float>output_abs(num_input);
-            for(int i=0;i<num_input;i++)
+//            delete [] input;
+            std::vector<float>output_abs(num_input-num_data);
+            for(int i=0;i<(num_input-num_data);i++)
             {
                 output_abs[i]=abs(output[i]);
             }
@@ -210,17 +211,22 @@ namespace gr {
         bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs) {
             float sum_signal=0.0;
             float sum_noise=0.0;
-            float sum_window=18.0;
-            for(int i=0;i<18;i++){
+            float sum_window=36.0;
+            sum_signal=fft_abs[0]*0.7;
+            for(int i=1;i<18;i++){
                 sum_signal+=fft_abs[i];
             }
-            for(int i=18;i<512;i++){
+            for(int i=d_fft_size;i>(d_fft_size-18);i--){
+                sum_signal+=fft_abs[i];
+            }
+            sum_noise=fft_abs[0]*0.3;
+            for(int i=18;i<(d_fft_size-18);i++){
                 sum_noise+=fft_abs[i];
             }
 
 
             sum_signal=sum_signal/sum_window;
-            sum_noise=sum_noise/(d_fft_size/2-sum_window);
+            sum_noise=sum_noise/(d_fft_size-sum_window);
 
             float snr_ratio=sum_signal/sum_noise;
 //            printf("snr_ratio = %f", snr_ratio);
@@ -231,13 +237,22 @@ namespace gr {
             return false;
         }
 
-//        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs){
+//        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs,const float *detect_window){
 //            float sum_signal=0.0;
-//            for(int i=0;i<28;i++)
-//                sum_signal+=fft_abs[i];
+//            float sum_noise=0.0;
+//            float sum_window=0.0;
+//            for(int i=0;i<d_fft_size;i++){
+//                sum_signal+=fft_abs[i]*detect_window[i];
+//                sum_noise-=fft_abs[i]*(detect_window[i]-1);
+//            }
+//            for(int i=0;i<d_fft_size;i++)
+//                sum_window+=detect_window[i];
 //
-////            printf("sum_signal=%f",sum_signal);
-//            if(sum_signal>d_energe)
+//            sum_signal=sum_signal/sum_window;
+//            sum_noise=sum_noise/(d_fft_size-sum_window);
+//
+//            float snr_ratio=sum_signal/sum_noise;
+//            if(snr_ratio>d_energe)
 //                return true;
 //            return false;
 //        }
@@ -290,7 +305,7 @@ namespace gr {
                         in += count;
                         cnt+=count;
                     }
-                    if(cnt==PSSCH_LEN){
+                    if(cnt==PSSCH_LEN*10){
                         printf("PSSCH has been saved, items number =%d \n",cnt);
                         d_save_status=-1;
                         cnt=0;
@@ -321,9 +336,10 @@ namespace gr {
 
 
             case 0:
-                  printf("waiting for the arrival of %d time_slot\n",d_timeslot);
+                  printf("waiting for the arrival of %d th time_slot,%d signals have been consumed\n",d_timeslot+1,d_waitslot);
                   if(d_waitslot+input_items_num<=(PSSCH_LEN-2048-160)){
                       ret=input_items_num;
+                      in+=ret;
                       d_waitslot+=input_items_num;
                       if(d_waitslot==(PSSCH_LEN-2048-160))
                           printf("PSBCH over\n");
@@ -331,91 +347,116 @@ namespace gr {
                       if(d_waitslot<(PSSCH_LEN-2048-160))
                           printf("PSBCH over\n");
                       ret=input_items_num;
+                      in+=ret;
                       d_waitslot+=input_items_num;
                       if(d_waitslot==(d_timeslot*PSSCH_LEN+PSSCH_LEN-2048-160)){
-                          printf("timeslot arrived\n");
+                          printf("timeslot arrived,%d signals have been consumed\n",d_waitslot);
                           d_save_status=1;
+                          d_waitslot=0;
                       }
                   }else{
-                      printf("timeslot arrived\n");
+
                       ret=d_timeslot*PSSCH_LEN+PSSCH_LEN-2048-160-d_waitslot;
+                      in+=ret;
+                      printf("timeslot arrived%d signals have been consumed\n",d_waitslot+ret);
                       d_save_status=1;
+                      d_waitslot=0;
                   }
                   break;
             case -1 :
 
 
 //                FILE *fwindow;
-//                fwindow = fopen("/home/alex/ROI/data/corr_data/PSBCH_FFT_Template", "rb");
+//                fwindow = fopen("/home/pc/ROI/data/corr_data/PSBCH_FFT_Template", "rb");
 //                if (fwindow == NULL) return noutput_items;
-//                float detect_window[d_fft_size] = {0};
+//                float detect_window[1024] = {0};
 //                fread(detect_window, sizeof(float), d_fft_size, fwindow);
-
-                while (ret + d_fft_size <= input_items_num) {
-                    std::vector<float> first_fft_abs = do_fft(in);
+                if(!d_detect_wait) {
+                    while (ret + d_fft_size <= input_items_num) {
+                        std::vector<float> first_fft_abs = do_fft(in);
 //                    printf("detect_energedetect_energedetect_energedetect_energedetect_energe");
-                    if (detect_energe(first_fft_abs)) {
-                        First_Detection++;
-                        printf("signal may start at ret=%d,First_Detection=%d\n", ret, First_Detection);
-                        if (First_Detection == 3 || corr_start) {
-                            printf("signal start at ret = %d\n", ret);
-                            if ((ret + 6592 - d_fft_size * 2) > input_items_num && !corr_start) {
-                                ret = ret - d_fft_size * 2;
-                                printf("left data is not enough\n");
-                                corr_start = true;
-                                break;
-                            }
-                            if (!corr_start) {
-                                ret = ret - d_fft_size * 2;
-                                in = in - d_fft_size * 2;
-                            }
-
-                            FILE *fp;
-                            fp = fopen("/home/alex/ROI/data/corr_data/Test_Out_Data_1", "rb");
-                            if (fp == NULL) return noutput_items;
-                            gr_complex data[NUM] = {0};
-                            fread(data, sizeof(gr_complex), NUM, fp);
-
-
-                            std::vector<float> output_abs = xcorr(in, data, input_items_num - ret, NUM);
-                            int maxindex;//存入最大的索引值
-                            int max_left = 0, max_right = 0;
-                            int begin_index = 0;
-                            bool pss_found = false;
-                            find_max(output_abs, maxindex);
-                            std::cout << "the bigest at index " << maxindex << "with output" << output_abs[maxindex]
-                                      << std::endl;
-//                    printf("abs compute success\n");
-                            if (output_abs[maxindex] >= d_threshold) {
-
-                                max_left = (maxindex - PSS_LEN) > 0 ? (maxindex - PSS_LEN) : -1;
-                                max_right = (maxindex + PSS_LEN) < input_items_num ? (maxindex + PSS_LEN) : -1;
-                                if (max_left != -1 && max_right != -1) {
-                                    if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
-                                        pss_found = true;
-                                        begin_index = max_left;
-                                    } else if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
-                                        pss_found = true;
-                                        begin_index = maxindex;
-                                    }
-                                } else if (max_left == -1) {
-                                    if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
-                                        pss_found = true;
-                                        begin_index = maxindex;
-                                    }
-                                } else if (max_right == -1) {
-                                    if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
-                                        pss_found = true;
-                                        begin_index = max_left;
-                                    }
+                        if (detect_energe(first_fft_abs)) {
+                            First_Detection++;
+                            printf("signal may start at ret=%d,First_Detection=%d\n", ret, First_Detection);
+                            if (First_Detection == 3 || corr_start) {
+                                printf("signal start at ret = %d\n", ret);
+                                if ((ret + 6592 - d_fft_size * 2) > input_items_num && !corr_start) {
+//                                ret = ret - d_fft_size * 2;
+                                    printf("left data is not enough\n");
+                                    corr_start = true;
+                                    break;
                                 }
+//                            if (!corr_start) {
+//                                ret = ret - d_fft_size * 2;
+//                                in = in - d_fft_size * 2;
+//                            }
 
-                            }
-                            if (pss_found) {
-                                printf("PSS sequences have been found\n");
 
-                                std::cout << "the pss begin at index " << begin_index << "with output"
-                                          << output_abs[begin_index] << std::endl;
+                                FILE *fp;
+                                fp = fopen("/home/pc/ROI/data/corr_data/Test_Out_Data_1", "rb");
+                                if (fp == NULL) return noutput_items;
+                                gr_complex data[2192] = {0};
+                                fread(data, sizeof(gr_complex), NUM, fp);
+                                int corr_len=(input_items_num - ret) > 5000 ? 5000 : (input_items_num - ret);
+
+                                std::vector<float> output_abs = xcorr(in, data,
+                                                                      corr_len, NUM);
+                                int maxindex;//存入最大的索引值
+                                int max_left = 0, max_right = 0;
+                                int begin_index = 0;
+                                bool pss_found = false;
+                                find_max(output_abs, maxindex);
+                                std::cout << "the bigest at index " << maxindex << "with output" << output_abs[maxindex]
+                                          << std::endl;
+//                    printf("abs compute success\n");
+                                if (output_abs[maxindex] >= d_threshold) {
+                                    /****    相关算法2（长度为signal.size()-data.size()）     *****/
+
+                                    max_left = maxindex > PSS_LEN ? (maxindex - PSS_LEN) : -1;
+                                    max_right = maxindex  < (corr_len-PSS_LEN*2) ? (maxindex + PSS_LEN) : -1;
+                                    if(max_left==-1&&max_right==-1){
+                                        pss_found= false;
+                                    }
+                                    else if (max_left == -1) {
+                                        if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
+                                            pss_found = true;
+                                            begin_index = maxindex;
+                                        }
+                                    } else if (max_right == -1) {
+                                        if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
+                                            pss_found = true;
+                                            begin_index = max_left;
+                                        }
+                                    }
+                                    /****    相关算法1（长度为signal.size()+data.size()）     *****/
+//                                    max_left = (maxindex - PSS_LEN) > 0 ? (maxindex - PSS_LEN) : -1;
+//                                    max_right = (maxindex + PSS_LEN) < input_items_num ? (maxindex + PSS_LEN) : -1;
+//                                    if (max_left != -1 && max_right != -1) {
+//                                        if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
+//                                            pss_found = true;
+//                                            begin_index = max_left;
+//                                        } else if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
+//                                            pss_found = true;
+//                                            begin_index = maxindex;
+//                                        }
+//                                    } else if (max_left == -1) {
+//                                        if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
+//                                            pss_found = true;
+//                                            begin_index = maxindex;
+//                                        }
+//                                    } else if (max_right == -1) {
+//                                        if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
+//                                            pss_found = true;
+//                                            begin_index = max_left;
+//                                        }
+//                                    }
+
+                                }
+                                if (pss_found) {
+                                    printf("PSS sequences have been found\n");
+
+                                    std::cout << "the pss begin at index " << begin_index+ret << "with output"
+                                              << output_abs[begin_index] << std::endl;
 
 //                                printf(" write items num = %d, input_items_num = %d, ret = %d\n", NUM,
 //                                       input_items_num,
@@ -445,30 +486,44 @@ namespace gr {
 //                                }
 //
 //                                if (d_unbuffered) fflush(d_fp);
-                                d_save_status=0;
-                                corr_start = false;
-                                ret += begin_index;
-                                break;
+                                    if(d_timeslot==0){
+                                        d_save_status=1;
+                                    }else{
+                                        d_save_status = 0;
+                                    }
 
-                            } else {
-                                printf("PSS not found\n");
-                                First_Detection = 0;
-                                d_save_status=-1;
-                                corr_start = false;
-                                ret += d_fft_size * 2;
+                                    corr_start = false;
+                                    printf("ready for saving data\n");
+                                    ret += begin_index;
+                                    in = in + begin_index;
+                                    break;
+
+                                } else {
+                                    printf("PSS not found,Detect failed\n");
+                                    First_Detection = 0;
+                                    d_save_status = -1;
+                                    corr_start = false;
+                                    ret = input_items_num;
+                                    d_detect_wait = 3;
+                                    break;
+                                }
+
                             }
 
+                        } else {
+                            First_Detection = 0;
+                            corr_start = false;
+                            if (corr_start)
+                                printf("corr_start = true ,error occured!\n");
                         }
 
-                    } else {
-                        First_Detection = 0;
-                        corr_start = false;
-                        if (corr_start)
-                            printf("corr_start = true ,error occured!\n");
+                        in = in + d_fft_size;
+                        ret += d_fft_size;
                     }
-
-                    in = in + d_fft_size;
-                    ret += d_fft_size;
+                }else{
+                    d_detect_wait=d_detect_wait>0?(--d_detect_wait):0;
+                    printf("wait for %d times general_work \n",d_detect_wait);
+                    ret=input_items_num;
                 }
                 break;
             }

@@ -51,6 +51,7 @@ namespace gr {
         float d_energe;//能量检测阈值
         bool corr_start=false;//是否进行相关
         float d_proportion;//相关次峰与主峰的比例
+        unsigned d_detect_wait=0;//检测失败等待次数
 
         fft_complex *d_fft;
         unsigned int d_fft_size;
@@ -88,7 +89,7 @@ namespace gr {
 
           bool set_window(const std::vector<float> &window);
         std::vector<float> do_fft(const gr_complex *in);
-//        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
+        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
           bool detect_energe(const std::vector<float> &fft_abs);
         int general_work(int noutput_items,
            gr_vector_int &ninput_items,
