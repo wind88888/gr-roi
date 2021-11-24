@@ -211,16 +211,17 @@ namespace gr {
         bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs) {
             float sum_signal=0.0;
             float sum_noise=0.0;
-            float sum_window=36.0;
+            float sum_window=9.0/256 *d_fft_size;
+            int freq_size=ceil(9.0/512 *d_fft_size);
             sum_signal=fft_abs[0]*0.7;
-            for(int i=1;i<18;i++){
+            for(int i=1;i<freq_size;i++){
                 sum_signal+=fft_abs[i];
             }
-            for(int i=d_fft_size;i>(d_fft_size-18);i--){
+            for(int i=d_fft_size;i>(d_fft_size-freq_size);i--){
                 sum_signal+=fft_abs[i];
             }
             sum_noise=fft_abs[0]*0.3;
-            for(int i=18;i<(d_fft_size-18);i++){
+            for(int i=freq_size;i<(d_fft_size-freq_size);i++){
                 sum_noise+=fft_abs[i];
             }
 
@@ -229,6 +230,7 @@ namespace gr {
             sum_noise=sum_noise/(d_fft_size-sum_window);
 
             float snr_ratio=sum_signal/sum_noise;
+//            printf("sum_window=%f,sum_signal=%f,sum_noise=%f,freq_size=%d,snr_ratio=%f",sum_window,sum_signal,sum_noise,freq_size,snr_ratio);
 //            printf("snr_ratio = %f", snr_ratio);
 
             if(snr_ratio>d_energe){
@@ -380,9 +382,31 @@ namespace gr {
                             First_Detection++;
                             printf("signal may start at ret=%d,First_Detection=%d\n", ret, First_Detection);
                             if (First_Detection == 3 || corr_start) {
-                                printf("signal start at ret = %d\n", ret);
-                                if ((ret + 6592 - d_fft_size * 2) > input_items_num && !corr_start) {
-//                                ret = ret - d_fft_size * 2;
+                                int shift_index=0;
+                                int si=d_fft_size/128;
+                                switch (si) {
+                                    case 0:
+                                        shift_index=1400;
+                                        break;
+                                    case 1:
+                                        shift_index=1400;
+                                        break;
+                                    case 2:
+                                        shift_index=1200;
+                                        break;
+                                    case 4:
+                                        shift_index=800;
+                                        break;
+                                    case 8:
+                                        shift_index=0;
+                                        break;
+                                    default:
+                                        shift_index=0;
+                                        break;
+                                }
+                                printf("signal start at ret = %d,shift_index=%d\n", ret,shift_index);
+                                if ((ret + 3000 + shift_index ) > input_items_num && !corr_start) {
+//                                  ret = ret - d_fft_size * 2;
                                     printf("left data is not enough\n");
                                     corr_start = true;
                                     break;
@@ -398,12 +422,13 @@ namespace gr {
                                 if (fp == NULL) return noutput_items;
                                 gr_complex data[2192] = {0};
                                 fread(data, sizeof(gr_complex), NUM, fp);
-                                int corr_len=(input_items_num - ret) > 5000 ? 5000 : (input_items_num - ret);
-
+                                ret=ret+shift_index;
+                                in=in+shift_index;
+                                int corr_len=(input_items_num - ret) > 3000 ? 3000 : (input_items_num - ret);
                                 std::vector<float> output_abs = xcorr(in, data,
                                                                       corr_len, NUM);
                                 int maxindex;//存入最大的索引值
-                                int max_left = 0, max_right = 0;
+//                                int max_left = 0, max_right = 0;
                                 int begin_index = 0;
                                 bool pss_found = false;
                                 find_max(output_abs, maxindex);
@@ -412,26 +437,26 @@ namespace gr {
 //                    printf("abs compute success\n");
                                 if (output_abs[maxindex] >= d_threshold) {
                                     /****    相关算法3000点（长度为signal.size()-data.size()）     *****/
-//                                    pss_found= true;
-//                                    begin_index=maxindex;
+                                    pss_found= true;
+                                    begin_index=maxindex;
                                     /****    相关算法2（长度为signal.size()-data.size()）     *****/
-//
-                                    max_left = maxindex > PSS_LEN ? (maxindex - PSS_LEN) : -1;
-                                    max_right = maxindex  < (corr_len-PSS_LEN*2) ? (maxindex + PSS_LEN) : -1;
-                                    if(max_left==-1&&max_right==-1){
-                                        pss_found= false;
-                                    }
-                                    else if (max_left == -1) {
-                                        if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
-                                            pss_found = true;
-                                            begin_index = maxindex;
-                                        }
-                                    } else if (max_right == -1) {
-                                        if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
-                                            pss_found = true;
-                                            begin_index = max_left;
-                                        }
-                                    }
+////
+//                                    max_left = maxindex > PSS_LEN ? (maxindex - PSS_LEN) : -1;
+//                                    max_right = maxindex  < (corr_len-PSS_LEN*2) ? (maxindex + PSS_LEN) : -1;
+//                                    if(max_left==-1&&max_right==-1){
+//                                        pss_found= false;
+//                                    }
+//                                    else if (max_left == -1) {
+//                                        if (output_abs[max_right] > output_abs[maxindex] * d_proportion) {
+//                                            pss_found = true;
+//                                            begin_index = maxindex;
+//                                        }
+//                                    } else if (max_right == -1) {
+//                                        if (output_abs[max_left] > output_abs[maxindex] * d_proportion) {
+//                                            pss_found = true;
+//                                            begin_index = max_left;
+//                                        }
+//                                    }
                                     /****    相关算法1（长度为signal.size()+data.size()）     *****/
 //                                    max_left = (maxindex - PSS_LEN) > 0 ? (maxindex - PSS_LEN) : -1;
 //                                    max_right = (maxindex + PSS_LEN) < input_items_num ? (maxindex + PSS_LEN) : -1;
@@ -498,7 +523,7 @@ namespace gr {
 
                                     corr_start = false;
                                     printf("ready for saving data\n");
-                                    ret += begin_index;
+                                    ret = ret + begin_index ;
                                     in = in + begin_index;
                                     break;
 
