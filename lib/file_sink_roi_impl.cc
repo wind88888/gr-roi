@@ -273,6 +273,7 @@ namespace gr {
 
 
            switch(d_save_status){
+
                case 1:
                    printf("now start to save PSSCH, %d/%d items have been saved",cnt,PSSCH_LEN);
 
@@ -305,7 +306,7 @@ namespace gr {
                         in += count;
                         cnt+=count;
                     }
-                    if(cnt==PSSCH_LEN*10){
+                    if(cnt==PSSCH_LEN){
                         printf("PSSCH has been saved, items number =%d \n",cnt);
                         d_save_status=-1;
                         cnt=0;
@@ -410,8 +411,11 @@ namespace gr {
                                           << std::endl;
 //                    printf("abs compute success\n");
                                 if (output_abs[maxindex] >= d_threshold) {
+                                    /****    相关算法3000点（长度为signal.size()-data.size()）     *****/
+//                                    pss_found= true;
+//                                    begin_index=maxindex;
                                     /****    相关算法2（长度为signal.size()-data.size()）     *****/
-
+//
                                     max_left = maxindex > PSS_LEN ? (maxindex - PSS_LEN) : -1;
                                     max_right = maxindex  < (corr_len-PSS_LEN*2) ? (maxindex + PSS_LEN) : -1;
                                     if(max_left==-1&&max_right==-1){
