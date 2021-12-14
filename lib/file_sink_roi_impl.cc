@@ -37,44 +37,58 @@ namespace gr {
     namespace roi {
 
         file_sink_roi::sptr
-        file_sink_roi::make(const char* filename, bool append, int cell_id,float threshold,float proportion,
+        file_sink_roi::make(const char* filename, bool append, int cell_id,float threshold,int rec_len,
                             int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,//used for fft
-                            float energe,int latency,int time_slot
+                            float energe,int latency,int time_slot,bool alice
         )
         {
             return gnuradio::get_initial_sptr
-                    (new file_sink_roi_impl(filename, append,cell_id, threshold,proportion, fft_size, forward, window, shift, nthreads,energe,latency,time_slot));
+                    (new file_sink_roi_impl(filename, append,cell_id, threshold,rec_len, fft_size, forward, window, shift, nthreads,energe,latency,time_slot,alice));
         }
 
 
         /*
          * The private constructor
          */
-        file_sink_roi_impl::file_sink_roi_impl(const char* filename, bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot)
+        file_sink_roi_impl::file_sink_roi_impl(const char* filename, bool append, int cell_id,float threshold,int rec_len,int fft_size,
+                                               bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot,bool alice)
                 : gr::block("file_sink_roi",
                             gr::io_signature::make(1, 1, sizeof(gr_complex)),
                             gr::io_signature::make(0, 0, 0)) ,
                   file_sink_base(filename, true, append),
                   d_latency(latency),
                   status_file(false),
+                  rx_file(false),
                   d_threshold(threshold),
                   d_cell_id(cell_id),
-                  d_proportion(proportion),
+                  d_receive_length(rec_len),
                   d_fft_size(fft_size),
                   d_forward(forward),
                   d_shift(shift),
                   d_energe(energe),
-                  d_timeslot(time_slot)
+                  d_timeslot(time_slot),
+                  d_alice(alice),
+                  receive_times(0),
+                  d_count(latency)
                   {
                       set_relative_rate(1.0 / 9000);
-                      d_port = pmt::mp("msg_status_file");
-                      message_port_register_out(d_port);
 
-                      std::cout<<"threshold = "<<d_threshold<<"proportion = "<<d_proportion<<"fft_size="<<d_fft_size<<std::endl;
+                      d_port = pmt::mp("msg_status_file");
+                      d_port_rx=pmt::mp("msg_rx_file");
+                      message_port_register_out(d_port);
+                      message_port_register_in(d_port_rx);
+                      set_msg_handler(d_port_rx, boost::bind(&file_sink_roi_impl::msg_handler, this, _1));
+
+                      std::cout<<"threshold = "<<d_threshold<<"receive_length = "<<d_receive_length<<"fft_size="<<d_fft_size<<std::endl;
                       d_fft = new fft_complex(d_fft_size, forward, nthreads);
                       if (!set_window(window)) {
                           throw std::runtime_error("fft_vcc: window not the same length as fft_size\n");
                       }
+                      if(d_alice){
+                          d_save_status=1;
+                          printf("the character is Alice\n");
+                      }
+//                      times=0;
         }
         std::vector<float> file_sink_roi_impl::xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data){
 //            gr_complex *input = new gr_complex[num_input+num_data];
@@ -239,25 +253,64 @@ namespace gr {
             return false;
         }
 
-//        bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs,const float *detect_window){
-//            float sum_signal=0.0;
-//            float sum_noise=0.0;
-//            float sum_window=0.0;
-//            for(int i=0;i<d_fft_size;i++){
-//                sum_signal+=fft_abs[i]*detect_window[i];
-//                sum_noise-=fft_abs[i]*(detect_window[i]-1);
-//            }
-//            for(int i=0;i<d_fft_size;i++)
-//                sum_window+=detect_window[i];
-//
-//            sum_signal=sum_signal/sum_window;
-//            sum_noise=sum_noise/(d_fft_size-sum_window);
-//
-//            float snr_ratio=sum_signal/sum_noise;
-//            if(snr_ratio>d_energe)
-//                return true;
-//            return false;
-//        }
+        bool file_sink_roi_impl::detect_energe_PSSCH(const std::vector<float> &fft_abs) {
+            float sum_signal=0.0;
+            float sum_noise=0.0;
+            float sum_window=147.0/256 *d_fft_size;
+            int freq_size=ceil(147.0/512 *d_fft_size);
+            sum_signal=fft_abs[0]*0.7;
+            for(int i=1;i<freq_size;i++){
+                sum_signal+=fft_abs[i];
+            }
+            for(int i=d_fft_size;i>(d_fft_size-freq_size);i--){
+                sum_signal+=fft_abs[i];
+            }
+            sum_noise=fft_abs[0]*0.3;
+            for(int i=freq_size;i<(d_fft_size-freq_size);i++){
+                sum_noise+=fft_abs[i];
+            }
+
+
+            sum_signal=sum_signal/sum_window;
+            sum_noise=sum_noise/(d_fft_size-sum_window);
+
+            float snr_ratio=sum_signal/sum_noise;
+//            printf("sum_window=%f,sum_signal=%f,sum_noise=%f,freq_size=%d,snr_ratio=%f",sum_window,sum_signal,sum_noise,freq_size,snr_ratio);
+//            printf("snr_ratio = %f", snr_ratio);
+
+            if(snr_ratio>d_energe&&snr_ratio<40){
+                printf("PSSCH detected with energe %f",snr_ratio);
+                return true;}
+
+            return false;
+        }
+
+//消息接收函数
+
+        void file_sink_roi_impl::msg_handler(pmt::pmt_t msg)
+        {
+
+            printf("***** MESSAGE DEBUG PRINT ********\n");
+            pmt::pmt_t msg_ctl = pmt::car(msg);
+            bool status_rx = pmt::to_bool(pmt::dict_ref(msg_ctl, pmt::mp("status_rx"), pmt::from_bool("false")));
+            //bool rx_file = pmt::dict_ref(msg_ctl, pmt::mp("rx_file"), pmt::from_bool("false"));
+            printf("rx_file = %d\n", status_rx);
+            printf("**********************************\n");
+            set_rx_file(status_rx);
+        }
+        void file_sink_roi_impl::set_rx_file(bool _rx_file) {
+
+            if (rx_file == _rx_file) {
+                return;
+            }
+
+            rx_file = _rx_file;
+        }
+        bool file_sink_roi_impl::get_rx_file() {
+            return rx_file;
+        }
+
+
 
         int
             file_sink_roi_impl::general_work(int noutput_items,
@@ -276,8 +329,83 @@ namespace gr {
 
            switch(d_save_status){
 
+               case 2:
+                   if(times==0){
+                       times=10;
+                       ret=input_items_num;
+                       times--;
+                       break;
+                   }
+                   if(times!=1){
+                       ret=input_items_num;
+                       times--;
+                       break;
+                   }
+                   d_save_status=1;
+                   times=0;
+                   status_file = true;
+                   send_message();
+                   break;
+
+
+
                case 1:
-                   printf("now start to save PSSCH, %d/%d items have been saved",cnt,PSSCH_LEN);
+                   /*单次测试*/
+//                   if(times){
+//                       throw std::runtime_error("receiver one time over\n");
+//                   }
+                   /*单次测试end*/
+                   /*多次测试*/
+                   if(receive_times>=1){throw std::runtime_error("receiver  times over\n");}
+
+                   if(d_alice&&!rx_file){
+//                       d_count+=input_items_num;
+                       ret=input_items_num;
+                       printf("%d have been consumed,receive time is %d\n",ret,receive_times);
+                       break;
+                   }
+//                   if(d_alice&&(d_count>0)&&(d_count<d_timeslot*PSSCH_LEN)){
+//                       if(d_count+input_items_num<d_timeslot*PSSCH_LEN){
+//                           d_count+=input_items_num;
+//                           ret=input_items_num;
+//                           printf("%d have been consumed,receive time is %d\n",d_count,receive_times);
+//                       }else{
+//                           ret=d_timeslot*PSSCH_LEN-d_count;
+//                           d_count=0;
+//                           printf("%d have been consumed,receive time is %d\n",d_count,receive_times);
+//                       }
+//                       break;
+//                   }
+//                  d_count矫正
+                   if(d_alice&&d_count){
+                       d_count--;
+                       ret=input_items_num;
+                       break;
+                   }
+
+
+/*alice接收端能量检测*/
+//                   if(d_alice&&!d_alice_rec) {
+//                       while (ret + d_fft_size <= input_items_num) {
+//                           std::vector<float> first_fft_abs = do_fft(in);
+//                           if (detect_energe_PSSCH(first_fft_abs)) {
+//                               printf("energe detected at ret = %d\n", ret);
+//                                d_alice_rec= true;
+//                               break;
+//                           }
+//                           ret = ret + d_fft_size;
+//                           in = in + d_fft_size;
+//                       }
+//                       if(!d_alice_rec){
+//                           times++;
+//                           printf("times of consumed is %d",times);
+//                           if(times>10)
+//                               throw std::runtime_error("no signal detected anymore\n");
+//                           break;
+//                       }
+//                   }
+
+                   printf("now start to save PSSCH, %d/%d items have been saved",cnt,d_receive_length*PSSCH_LEN);
 
                    struct timeval timer;
                    gettimeofday(&timer, NULL);
@@ -287,12 +415,13 @@ namespace gr {
                    do_update();
                    if(!d_fp)
                     return noutput_items;
-                   if(cnt==0){
-                       ftruncate(fileno(d_fp), 0);
-                       rewind(d_fp);
-                   }
+                   /*多次测试时注销*/
+//                   if(cnt==0){
+//                       ftruncate(fileno(d_fp), 0);
+//                       rewind(d_fp);
+//                   }
 
-                if(cnt+input_items_num<=PSSCH_LEN) {
+                if(cnt+input_items_num<=d_receive_length*PSSCH_LEN) {
                     while (ret<input_items_num) {
                         int count = fwrite(in, sizeof(gr_complex), input_items_num-ret, d_fp);
                         if (count == 0) {
@@ -308,14 +437,36 @@ namespace gr {
                         in += count;
                         cnt+=count;
                     }
-                    if(cnt==PSSCH_LEN){
+                    if(cnt==d_receive_length*PSSCH_LEN){
                         printf("PSSCH has been saved, items number =%d \n",cnt);
-                        d_save_status=-1;
+                        if(d_alice){
+                            d_save_status=2;
+                            /*单次测试*/
+//                            times=times+1;
+                            /*单次测试end*/
+//                            printf("times=%d\n",times);
+                        } else{
+                            d_save_status=-1;
+                            d_detect_wait=3;
+                        }
                         cnt=0;
+
+//                        if(d_latency > 0) usleep(d_latency);
+//                        status_file = true;
+//                        send_message();
+                        if(d_alice){
+                            receive_times++;
+                            rx_file= false;
+                            d_count=d_latency;//矫正Alice端接收
+                            d_alice_rec= false;
+                            printf("%d times received\n",receive_times);
+
+                        }
+
                     }
 
                 }else{
-                    int count = fwrite(in, sizeof(gr_complex), PSSCH_LEN-cnt, d_fp);
+                    int count = fwrite(in, sizeof(gr_complex), d_receive_length*PSSCH_LEN-cnt, d_fp);
                     if (count == 0) {
                         if (ferror(d_fp)) {
                             std::stringstream s;
@@ -329,8 +480,32 @@ namespace gr {
                     in += count;
                     cnt+=count;
                     printf("PSSCH has been saved, saved items number =%d \n",cnt);
-                    d_save_status=-1;
+                    if(d_alice){
+                        d_save_status=2;
+                        /*单次测试*/
+//                        times=times+1;
+                        /*单次测试end*/
+//                        printf("times=%d\n",times);
+                    } else{
+                        d_save_status=-1;
+                        d_detect_wait=3;
+                    }
+                    /*单次测试*/
+//                    if(times>=2){
+//                        throw std::runtime_error("receiver one time over\n");
+//                    }
+                    /*单次测试end*/
                     cnt=0;
+//                    if(d_latency > 0) usleep(d_latency);
+//                    status_file = true;
+//                    send_message();
+                    if(d_alice){
+                        receive_times++;
+                        rx_file= false;
+                        printf("%d times received\n",receive_times);
+                        d_count=d_latency;//矫正Alice端接收
+                        d_alice_rec= false;
+                    }
                 }
 
                 if(d_unbuffered)
@@ -339,7 +514,12 @@ namespace gr {
 
 
             case 0:
-                  printf("waiting for the arrival of %d th time_slot,%d signals have been consumed\n",d_timeslot+1,d_waitslot);
+                if(!d_alice){
+                    printf("waiting for the arrival of %d th time_slot,%d signals have been consumed\n",d_timeslot+1,d_waitslot);
+                }else if(d_waitslot==0){
+                    printf("Alice is waiting for the arrival of %d th time_slot",d_timeslot+1);
+                }
+
                   if(d_waitslot+input_items_num<=(PSSCH_LEN-2048-160)){
                       ret=input_items_num;
                       in+=ret;
@@ -349,6 +529,10 @@ namespace gr {
                   }else if(d_waitslot+input_items_num<=(d_timeslot*PSSCH_LEN+PSSCH_LEN-2048-160)){
                       if(d_waitslot<(PSSCH_LEN-2048-160))
                           printf("PSBCH over\n");
+                      if(d_alice&&(d_waitslot<=20512)){
+                          d_waitslot=d_waitslot-2048-160;
+                          printf("Alice's waiting\n");
+                      }
                       ret=input_items_num;
                       in+=ret;
                       d_waitslot+=input_items_num;

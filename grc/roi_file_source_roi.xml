@@ -72,4 +72,9 @@
     <type>$type</type>
     <vlen>$vlen</vlen>
   </source>
+  <source>
+    <name>msg_rx_file</name>
+    <type>message</type>
+    <optional>1</optional>
+  </source>
 </block>

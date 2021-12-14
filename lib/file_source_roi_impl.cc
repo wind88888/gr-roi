@@ -254,13 +254,14 @@ namespace gr {
       : gr::sync_block("file_source_roi",
               gr::io_signature::make(0, 0, 0),
               gr::io_signature::make(1, 1, itemsize)),
-        itemsize(itemsize), fp(0), new_fp(0), updated(false), tx_file(tx_file), cnt(0), is_add_sob(true)
+        itemsize(itemsize), fp(0), new_fp(0), updated(false), tx_file(tx_file), cnt(0), is_add_sob(true),status_rx(false),send_times(0)
 
     {
         d_port = pmt::mp("msg_status_file");
         message_port_register_in(d_port);
-
         set_msg_handler(d_port, boost::bind(&file_source_roi_impl::msg_handler, this, _1));
+        d_port_rx=pmt::mp("msg_rx_file");
+        message_port_register_out(d_port_rx);
 
         open(filename);
         do_update();
@@ -285,6 +286,18 @@ namespace gr {
           printf("status_file = %d\n", status_file);
           printf("**********************************\n");
           set_tx_file(status_file);
+      }
+
+      void file_source_roi_impl::send_message() {
+          pmt::pmt_t msg_ctl = pmt::make_dict();
+          msg_ctl = pmt::dict_add(msg_ctl, pmt::string_to_symbol("status_rx"), pmt::from_bool(true));
+
+          pmt::pmt_t msg_data = pmt::make_vector(0, pmt::from_long(0));
+//            pmt::pmt_t msg = pmt::cons(msg_ctl, pmt::make_u8vector(0, 0));
+          pmt::pmt_t msg = pmt::cons(msg_ctl, msg_data);
+          printf("send message start\n");
+          message_port_pub(d_port_rx, msg);
+          printf("send message end\n");
       }
 
       /**
@@ -420,6 +433,10 @@ namespace gr {
 //              return noutput_items;
               return 0;
           }
+          /*单次测试t*/
+//          if(one_time){
+//              throw std::runtime_error("one time is over\n");
+//          }
 
           struct timeval timer;
           gettimeofday(&timer, NULL);
@@ -459,7 +476,18 @@ namespace gr {
               add_eob(nitems_written(0) + noutput_items - size - 1);
               // 到这里, 说明文件已经读取完毕
               // 如果只发送一次该文件, 则直接跳出循环, 之后的work的fp都在文件末尾
+              status_rx= true;
+              send_message();
               tx_file = false;
+              send_times++;
+              printf("%d times have been sent\n",send_times);
+              /*多次测试*/
+              if(send_times>=1){
+              throw std::runtime_error("one time is over\n");
+                }
+
+              /*单次测试*/
+//                one_time= true;
 
               break;
           }

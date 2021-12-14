@@ -50,7 +50,7 @@ namespace gr {
 
         float d_energe;//能量检测阈值
         bool corr_start=false;//是否进行相关
-        float d_proportion;//相关次峰与主峰的比例
+//        float d_proportion;//相关次峰与主峰的比例
         unsigned d_detect_wait=0;//检测失败等待次数
 
         fft_complex *d_fft;
@@ -62,16 +62,26 @@ namespace gr {
 
         int d_waitslot=0;//用来计数等待的点数以对应时隙
         int d_timeslot;
-        int cnt=0;
+        int cnt=0;//存储计数
+
         int d_save_status=-1;//-1 for no pss has been found;0 for pss has been found ,wait for PSSCH;1 for PSSCH saving.
 
         pmt::pmt_t d_port;
+        pmt::pmt_t d_port_rx;
+        bool rx_file;
+        int receive_times;
 
         int d_latency;//收发转换间隔
+        bool d_alice;
+        int d_count;//用来矫正Alice端接收
+        bool d_alice_rec=false;
+        int d_receive_length=1;
 
+        int times=0;
 
      public:
-        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,float proportion,int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot);
+        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,int rec_len,int fft_size, bool forward,
+                           const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot,bool alice);
       ~file_sink_roi_impl();
 
       // Where all the action really happens
@@ -89,8 +99,14 @@ namespace gr {
 
           bool set_window(const std::vector<float> &window);
         std::vector<float> do_fft(const gr_complex *in);
-        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
+//        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
           bool detect_energe(const std::vector<float> &fft_abs);
+          bool detect_energe_PSSCH(const std::vector<float> &fft_abs);
+          // 接收方消息处理
+          void msg_handler(pmt::pmt_t msg);
+          void set_rx_file(bool _rx_file);
+          bool get_rx_file();
+
         int general_work(int noutput_items,
            gr_vector_int &ninput_items,
            gr_vector_const_void_star &input_items,

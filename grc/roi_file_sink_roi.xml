@@ -5,7 +5,7 @@
   <category>[ROI]</category>
   <import>import roi</import>
   <import>from gnuradio.fft import window</import>
-  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$proportion, $fft_size, $forward, $window, $shift, $nthreads,$energe,$latency,$time_slot)</make>
+  <make>roi.file_sink_roi($file, $append, $cell_id,$threshold,$rec_len, $fft_size, $forward, $window, $shift, $nthreads,$energe,$latency,$time_slot,$alice)</make>
   <callback>set_unbuffered($unbuffered)</callback>
   <callback>open($file)</callback>
   <!-- Make one 'param' node for every Parameter you want settable from the GUI.
@@ -80,10 +80,10 @@
     <type>float</type>
   </param>
   <param>
-    <name>Proportion</name>
-    <key>proportion</key>
+    <name>Rec_len</name>
+    <key>rec_len</key>
     <value>1</value>
-    <type>float</type>
+    <type>int</type>
   </param>
   <param>
     <name>FFT Size</name>
@@ -142,6 +142,20 @@
     <value>1</value>
     <type>int</type>
   </param>
+  <param>
+    <name>Alice/Bob</name>
+    <key>alice</key>
+    <value>False</value>
+    <type>bool</type>
+    <option>
+      <name>Alice</name>
+      <key>True</key>
+    </option>
+    <option>
+      <name>Bob</name>
+      <key>False</key>
+    </option>
+  </param>
 
   <!-- Make one 'sink' node per input. Sub-nodes:
        * name (an identifier for the GUI)
@@ -152,6 +166,11 @@
     <name>in</name>
     <type>$type</type>
     <vlen>1</vlen>
+  </sink>
+  <sink>
+    <name>msg_rx_file</name>
+    <type>message</type>
+    <optional>1</optional>
   </sink>
 
   <!-- Make one 'source' node per output. Sub-nodes:

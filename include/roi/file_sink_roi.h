@@ -55,7 +55,8 @@ namespace gr {
        * class. roi::file_sink_roi::make is the public interface for
        * creating new instances.
        */
-      static sptr make(const char *filename, bool append,  int cell_id, float threshold, float proportion, int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot);
+      static sptr make(const char *filename, bool append,  int cell_id, float threshold, int rec_len,
+                       int fft_size, bool forward, const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot,bool alice);
     };
 
   } // namespace roi

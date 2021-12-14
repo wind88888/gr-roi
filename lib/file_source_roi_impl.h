@@ -223,12 +223,19 @@ namespace gr {
         void do_update();
 
         bool tx_file;
+        int send_times;
 
         pmt::pmt_t d_port;
+
+        //发送方新增pmt端口
+        pmt::pmt_t d_port_rx;
+        bool status_rx;
 
         int cnt;
 
         bool is_add_sob;
+
+        bool one_time= false;
 
      public:
       file_source_roi_impl(size_t itemsize, const char *filename, bool tx_file);
@@ -246,6 +253,8 @@ namespace gr {
          gr_vector_void_star &output_items);
 
         void msg_handler(pmt::pmt_t msg);
+        // 发送方新增消息
+        void send_message();
 
         // file operation
         bool seek(long seek_point, int whence);
