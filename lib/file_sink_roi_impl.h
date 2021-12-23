@@ -73,9 +73,11 @@ namespace gr {
 
         int d_latency;//收发转换间隔
         bool d_alice;
+        bool d_alice_pssfound;
         int d_count;//用来矫正Alice端接收
         bool d_alice_rec=false;
         int d_receive_length=1;
+
 
         int times=0;
 

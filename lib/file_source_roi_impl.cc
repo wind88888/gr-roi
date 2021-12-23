@@ -476,13 +476,13 @@ namespace gr {
               add_eob(nitems_written(0) + noutput_items - size - 1);
               // 到这里, 说明文件已经读取完毕
               // 如果只发送一次该文件, 则直接跳出循环, 之后的work的fp都在文件末尾
-              status_rx= true;
-              send_message();
+//              status_rx= true;
+//              send_message();
               tx_file = false;
               send_times++;
               printf("%d times have been sent\n",send_times);
               /*多次测试*/
-              if(send_times>=1){
+              if(send_times>=10){
               throw std::runtime_error("one time is over\n");
                 }
 
