@@ -223,6 +223,7 @@ namespace gr {
 
             return fft_abs;
         }
+
         bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs) {
             float sum_signal=0.0;
             float sum_noise=0.0;
@@ -248,7 +249,7 @@ namespace gr {
 //            printf("sum_window=%f,sum_signal=%f,sum_noise=%f,freq_size=%d,snr_ratio=%f",sum_window,sum_signal,sum_noise,freq_size,snr_ratio);
 //            printf("snr_ratio = %f", snr_ratio);
 
-            if(snr_ratio>70){
+            if(snr_ratio>40){
                 return true;}
 
             return false;
@@ -394,9 +395,9 @@ namespace gr {
                            std::vector<float> first_fft_abs = do_fft(in);
                            if (detect_energe_PSSCH(first_fft_abs)) {
                                printf("energe detected at ret = %d\n", ret);
-                               if(ret>2800){
-                                   in = in-2800;
-                                   ret = ret-2800;
+                               if(ret>1800){
+                                   in = in-1800;
+                                   ret = ret-1800;
                                }else{
                                    ret=0;
                                }
@@ -409,8 +410,8 @@ namespace gr {
                        }
                        if(!d_alice_rec){
                            times++;
-                           if(times>10){
-                               printf("times of consumed is %d",times);
+                           if(times>11){
+                               printf("enege detect failed times of consumed is %d\n",times);
                                times=0;
                                d_alice_rec= true;
                            }
@@ -438,7 +439,7 @@ namespace gr {
                        std::cout << "the bigest at index " << maxindex_dmrs << "with output" << output_abs[maxindex_dmrs]
                                  << std::endl;
 //                    printf("abs compute success\n");
-                       if (output_abs[maxindex_dmrs] >= 300) {
+                       if (output_abs[maxindex_dmrs] >= 100) {
                            printf("DMRS has been found \n");
                            in=in - (2048 * 2 +160+144)+maxindex_dmrs;
                            ret = ret -(2048 * 2 +160+144)+maxindex_dmrs;

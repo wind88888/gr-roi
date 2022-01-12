@@ -100,7 +100,7 @@ namespace gr {
         void find_max(std::vector<float>  output_abs,int &maxindex);
 
           bool set_window(const std::vector<float> &window);
-        std::vector<float> do_fft(const gr_complex *in);
+          std::vector<float> do_fft(const gr_complex *in);
 //        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
           bool detect_energe(const std::vector<float> &fft_abs);
           bool detect_energe_PSSCH(const std::vector<float> &fft_abs);
