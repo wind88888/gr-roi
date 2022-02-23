@@ -254,14 +254,14 @@ namespace gr {
       : gr::sync_block("file_source_roi",
               gr::io_signature::make(0, 0, 0),
               gr::io_signature::make(1, 1, itemsize)),
-        itemsize(itemsize), fp(0), new_fp(0), updated(false), tx_file(tx_file), cnt(0), is_add_sob(true),status_rx(false),send_times(0)
+        itemsize(itemsize), fp(0), new_fp(0), updated(false), tx_file(tx_file), cnt(0), is_add_sob(true),send_times(0)
 
     {
         d_port = pmt::mp("msg_status_file");
         message_port_register_in(d_port);
         set_msg_handler(d_port, boost::bind(&file_source_roi_impl::msg_handler, this, _1));
-        d_port_rx=pmt::mp("msg_rx_file");
-        message_port_register_out(d_port_rx);
+//        d_port_rx=pmt::mp("msg_rx_file");
+//        message_port_register_out(d_port_rx);
 
         open(filename);
         do_update();
@@ -288,17 +288,17 @@ namespace gr {
           set_tx_file(status_file);
       }
 
-      void file_source_roi_impl::send_message() {
-          pmt::pmt_t msg_ctl = pmt::make_dict();
-          msg_ctl = pmt::dict_add(msg_ctl, pmt::string_to_symbol("status_rx"), pmt::from_bool(true));
-
-          pmt::pmt_t msg_data = pmt::make_vector(0, pmt::from_long(0));
-//            pmt::pmt_t msg = pmt::cons(msg_ctl, pmt::make_u8vector(0, 0));
-          pmt::pmt_t msg = pmt::cons(msg_ctl, msg_data);
-          printf("send message start\n");
-          message_port_pub(d_port_rx, msg);
-          printf("send message end\n");
-      }
+//      void file_source_roi_impl::send_message() {
+//          pmt::pmt_t msg_ctl = pmt::make_dict();
+//          msg_ctl = pmt::dict_add(msg_ctl, pmt::string_to_symbol("status_rx"), pmt::from_bool(true));
+//
+//          pmt::pmt_t msg_data = pmt::make_vector(0, pmt::from_long(0));
+////            pmt::pmt_t msg = pmt::cons(msg_ctl, pmt::make_u8vector(0, 0));
+//          pmt::pmt_t msg = pmt::cons(msg_ctl, msg_data);
+//          printf("send message start\n");
+//          message_port_pub(d_port_rx, msg);
+//          printf("send message end\n");
+//      }
 
       /**
        * 关闭new_fp对应的文件, 释放new_fp指针

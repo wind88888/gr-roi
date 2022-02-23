@@ -228,8 +228,8 @@ namespace gr {
         pmt::pmt_t d_port;
 
         //发送方新增pmt端口
-        pmt::pmt_t d_port_rx;
-        bool status_rx;
+//        pmt::pmt_t d_port_rx;
+//        bool status_rx;
 
         int cnt;
 

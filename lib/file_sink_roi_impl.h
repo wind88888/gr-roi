@@ -46,9 +46,11 @@ namespace gr {
 
         bool status_file; // 标识文件中数据是否有效
         float d_threshold;//PSSS相关阈值
+        float d_threshold_DMRS;
         int d_cell_id;//cell_id
 
         float d_energe;//能量检测阈值
+        float d_energe_DMRS;
         bool corr_start=false;//是否进行相关
 //        float d_proportion;//相关次峰与主峰的比例
         unsigned d_detect_wait=0;//检测失败等待次数
@@ -67,8 +69,8 @@ namespace gr {
         int d_save_status=-1;//-1 for no pss has been found;0 for pss has been found ,wait for PSSCH;1 for PSSCH saving.
 
         pmt::pmt_t d_port;
-        pmt::pmt_t d_port_rx;
-        bool rx_file;
+//        pmt::pmt_t d_port_rx;//需要删除
+//        bool rx_file;//需要删除
         int receive_times;
 
         int d_latency;//收发转换间隔
@@ -81,10 +83,11 @@ namespace gr {
 
         int times=0;
 
-     public:
-        file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,int rec_len,int fft_size, bool forward,
-                           const std::vector<float> &window, bool shift, int nthreads,float energe,int latency,int time_slot,bool alice);
-      ~file_sink_roi_impl();
+        public:
+            //新增d_energe_DMRS，d_threshold_DMRS
+            file_sink_roi_impl(const char *filename,bool append, int cell_id,float threshold,float threshold_DMRS,int rec_len,int fft_size, bool forward,
+                               const std::vector<float> &window, bool shift, int nthreads,float energe,float energe_DMRS,int latency,int time_slot,bool alice);
+            ~file_sink_roi_impl();
 
       // Where all the action really happens
 //      void forecast (int noutput_items, gr_vector_int &ninput_items_required);
