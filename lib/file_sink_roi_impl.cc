@@ -70,40 +70,23 @@ namespace gr {
                   d_timeslot(time_slot),
                   d_alice(alice),
                   receive_times(0),//测试用，实际使用时删除
-                  d_alice_pssfound(false)
+                  d_alice_pssfound(false),
+                  d_count(0)
                   {
                       set_relative_rate(1.0 / 9000);
 
                       d_port = pmt::mp("msg_status_file");
-//                      d_port_rx=pmt::mp("msg_rx_file");//不需要
                       message_port_register_out(d_port);
-//                      message_port_register_in(d_port_rx);//不需要
-//                      set_msg_handler(d_port_rx, boost::bind(&file_sink_roi_impl::msg_handler, this, _1));
 
                       std::cout<<"threshold = "<<d_threshold<<"receive_length = "<<d_receive_length<<"fft_size="<<d_fft_size<<std::endl;
                       d_fft = new fft_complex(d_fft_size, forward, nthreads);
                       if (!set_window(window)) {
                           throw std::runtime_error("fft_vcc: window not the same length as fft_size\n");
                       }
-                      //alice端自检测测试
-//                      if(d_alice){
-//                          d_save_status=1;
-//                          printf("the character is Alice\n");
-//                      }
                       times=0;
         }
         /***相关计算函数***/
         std::vector<float> file_sink_roi_impl::xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data){
-//            gr_complex *input = new gr_complex[num_input+num_data];
-//            printf("doing xcorr\n");
-//            for(int i=0;i<(num_input+num_data);i++)
-//            {
-//                if(i<num_input){
-//                    input[i]=in[i];
-//                }else{
-//                    input[i]=0;
-//                }
-//            }
             std::vector<gr_complex> output(num_input-num_data);
             for(int i=0;i<(num_input-num_data);i++)
 //                for(int i=0;i<(num_input);i++)
@@ -117,7 +100,6 @@ namespace gr {
             {
                 output_abs[i]=abs(output[i]);
             }
-//            printf("xcorr success\n");
             return output_abs;
 
         }
@@ -288,30 +270,6 @@ namespace gr {
             return false;
         }
 
-/*** 消息接收即处理相关的函数函数 (实际系统不需要) ***/
-
-//        void file_sink_roi_impl::msg_handler(pmt::pmt_t msg)
-//        {
-//
-//            printf("***** MESSAGE DEBUG PRINT ********\n");
-//            pmt::pmt_t msg_ctl = pmt::car(msg);
-//            bool status_rx = pmt::to_bool(pmt::dict_ref(msg_ctl, pmt::mp("status_rx"), pmt::from_bool("false")));
-//            //bool rx_file = pmt::dict_ref(msg_ctl, pmt::mp("rx_file"), pmt::from_bool("false"));
-//            printf("rx_file = %d\n", status_rx);
-//            printf("**********************************\n");
-//            set_rx_file(status_rx);
-//        }
-//        void file_sink_roi_impl::set_rx_file(bool _rx_file) {
-//
-//            if (rx_file == _rx_file) {
-//                return;
-//            }
-//
-//            rx_file = _rx_file;
-//        }
-//        bool file_sink_roi_impl::get_rx_file() {
-//            return rx_file;
-//        }
 
         /*** 主要循环函数general_work  ***/
         int
@@ -322,73 +280,16 @@ namespace gr {
             int ret=0;// 记录消耗的item数目
             int First_Detection=0;
             int input_items_num=ninput_items[0];
-//            std::cout<<"input_items_num="<<input_items_num<<"ret="<<ret<<std::endl;
-
-//                printf("ret=%d\n",ret);
+            if(status_file== true){
+                consume_each(input_items_num);
+                return input_items_num;
+            }
 
             const gr_complex *in = (const gr_complex *) input_items[0];
 
 
             switch(d_save_status){
-                /***测试部分，实际使用时需要删除***/
-//                case 2:
-//                    if(times==0){
-//                        times=50;
-//                        ret=input_items_num;
-//                        times--;
-//                        break;
-//                    }
-//                    if(times!=1){
-//                        ret=input_items_num;
-//                        times--;
-//                        break;
-//                    }
-//                    d_save_status=-1;
-//                    printf("start to send message\n");
-//                    times=0;
-//                    status_file = true;
-//                    send_message();
-//                    break;
-
-
-
                 case 1:
-                    /*单次测试*/
-//                   if(times){
-//                       throw std::runtime_error("receiver one time over\n");
-//                   }
-                    /*单次测试end*/
-                    /*多次测试*/
-//                   if(receive_times>=10){throw std::runtime_error("receiver  times over\n");}
-//alice端自检测删除部分
-//                   if(d_alice&&!rx_file){
-//                       ret=input_items_num;
-//                       printf("%d have been consumed,receive time is %d\n",ret,receive_times);
-//                       break;
-//                   }
-//alice按点数接收PSSCH
-//                   if(d_alice&&(d_count>0)&&(d_count<d_timeslot*PSSCH_LEN)){
-//                       if(d_count+input_items_num<d_timeslot*PSSCH_LEN){
-//                           d_count+=input_items_num;
-//                           ret=input_items_num;
-//                           printf("%d have been consumed,receive time is %d\n",d_count,receive_times);
-//                       }else{
-//                           ret=d_timeslot*PSSCH_LEN-d_count;
-//                           d_count=0;
-//                           printf("%d have been consumed,receive time is %d\n",d_count,receive_times);
-//                       }
-//                       break;
-//                   }
-
-//                  d_count矫正
-//alice端自检测删除部分
-//                   if(d_alice&&d_count){
-//                       d_count--;
-//                       ret=input_items_num;
-//                       break;
-//                   }
-
-
 /*alice接收端能量检测*/
                     if(d_alice&&!d_alice_rec) {
                         while (ret + d_fft_size <= input_items_num) {
@@ -408,13 +309,15 @@ namespace gr {
                             ret = ret + d_fft_size;
                             in = in + d_fft_size;
                         }
+                        d_count+=ret;
+                        std::cout<<"------"<<"d_count="<<d_count<<"----------"<<std::endl;
                         if(!d_alice_rec){
                             times++;
                             /***这里在实际使用时可以判断失败然后跳过DMRS相关***/
                             if(times>11){
                                 printf("enege detect failed times of consumed is %d\n",times);
                                 times=0;
-                                d_alice_rec= true;
+                                d_save_status=-1;//返回继续进行PSS检波
                             }
                         }
                         break;
@@ -428,18 +331,13 @@ namespace gr {
                         in = in + (2048 * 2 );
                         ret =ret +(2048 * 2 );
                         int corr_len_dmrs = (input_items_num - ret) > 4000 ? 4000 : (input_items_num - ret);
-//                       int corr_len_dmrs = input_items_num - ret;
                         printf("start to calculate xcorr ret=%d,corr_len_dmrs =%d \n",ret,corr_len_dmrs);
                         std::vector<float> output_abs = xcorr(in, data_dmrs,
                                                               corr_len_dmrs, NUM);
                         int maxindex_dmrs;//存入最大的索引值
-//                                int max_left = 0, max_right = 0;
-//                       int begin_index_dmrs = 0;
-//                       bool dmrs_found = false;
                         find_max(output_abs, maxindex_dmrs);
                         std::cout << "the bigest at index " << maxindex_dmrs << "with output" << output_abs[maxindex_dmrs]
                                   << std::endl;
-//                    printf("abs compute success\n");
                         if (output_abs[maxindex_dmrs] >= d_threshold_DMRS) {
                             printf("DMRS has been found \n");
                             in=in - (2048 * 2 +160+144)+maxindex_dmrs;
@@ -450,9 +348,12 @@ namespace gr {
                             in=in - (2048 * 2 );
                             ret = ret -(2048 * 2 );
                             times=0;
+                            d_save_status=-1;
+                            d_alice_rec= false;
+                            break;
                         }
                     }
-
+                    printf("%d items between two PSSCH ",d_count);
                     printf("now start to save PSSCH, %d/%d items have been saved",cnt,d_receive_length*PSSCH_LEN);
 
                     struct timeval timer;
@@ -463,7 +364,6 @@ namespace gr {
                     do_update();
                     if(!d_fp)
                         return noutput_items;
-                    /*多次测试时注销*/
                     if(cnt==0){
                         ftruncate(fileno(d_fp), 0);
                         rewind(d_fp);
@@ -488,30 +388,22 @@ namespace gr {
                         if(cnt==d_receive_length*PSSCH_LEN){
                             printf("PSSCH has been saved, items number =%d \n",cnt);
                             if(d_alice){
-//                                d_save_status=2;
                                 d_save_status=-1;
-                                /*单次测试*/
-//                            times=times+1;
-                                /*单次测试end*/
-//                            printf("times=%d\n",times);
                             } else{
                                 d_save_status=-1;
                                 d_detect_wait=3;
                             }
                             cnt=0;
 
-//                        if(d_latency > 0) usleep(d_latency);
-//                        status_file = true;
-//                        send_message();
+                        if(d_latency > 0) usleep(d_latency);
+                        status_file = true;
+                        send_message();
                             if(d_alice){
                                 receive_times++;
-//                                rx_file= false;
-//                            d_count=d_latency;//矫正Alice端接收
                                 d_alice_rec= false;
                                 printf("%d times received\n",receive_times);
 
                             }
-
                         }
 
                     }else{
@@ -530,30 +422,18 @@ namespace gr {
                         cnt+=count;
                         printf("PSSCH has been saved, saved items number =%d \n",cnt);
                         if(d_alice){
-//                          d_save_status=2;
                             d_save_status=-1;
-                            /*单次测试*/
-//                        times=times+1;
-                            /*单次测试end*/
-//                        printf("times=%d\n",times);
                         } else{
                             d_save_status=-1;
                             d_detect_wait=3;
                         }
-                        /*单次测试*/
-//                    if(times>=2){
-//                        throw std::runtime_error("receiver one time over\n");
-//                    }
-                        /*单次测试end*/
                         cnt=0;
-//                    if(d_latency > 0) usleep(d_latency);
-//                    status_file = true;
-//                    send_message();
+                    if(d_latency > 0) usleep(d_latency);
+                    status_file = true;
+                    send_message();
                         if(d_alice){
                             receive_times++;
-//                        rx_file= false;
                             printf("%d times received\n",receive_times);
-//                        d_count=d_latency;//矫正Alice端接收
                             d_alice_rec= false;
                         }
                     }
@@ -580,6 +460,7 @@ namespace gr {
                                 printf("timeslot arrived,%d signals have been consumed\n", d_waitslot);
                                 d_save_status = 1;
                                 d_waitslot = 0;
+                                d_count=0;
                             }
 
                         }else{
@@ -587,6 +468,7 @@ namespace gr {
                             in += ret;
                             printf("timeslot arrived%d signals have been consumed\n", d_waitslot + ret);
                             d_save_status = 1;
+                            d_count=0;
                             d_waitslot = 0;
                         }
                         /***alice端检测到自己发出的PSS，则按照和bob端相同的处理方式，只是d_timeslot在设置时+1，以跳过自身发出的PSSCH***/
@@ -636,7 +518,6 @@ namespace gr {
                     if(!d_detect_wait) {
                         while (ret + d_fft_size <= input_items_num) {
                             std::vector<float> first_fft_abs = do_fft(in);
-//                    printf("detect_energedetect_energedetect_energedetect_energedetect_energe");
                             if (detect_energe(first_fft_abs)) {
                                 First_Detection++;
                                 printf("signal may start at ret=%d,First_Detection=%d\n", ret, First_Detection);
@@ -665,15 +546,10 @@ namespace gr {
                                     }
                                     printf("signal start at ret = %d,shift_index=%d\n", ret,shift_index);
                                     if ((ret + 3000 + shift_index ) > input_items_num && !corr_start) {
-//                                  ret = ret - d_fft_size * 2;
                                         printf("left data is not enough\n");
                                         corr_start = true;
                                         break;
                                     }
-//                            if (!corr_start) {
-//                                ret = ret - d_fft_size * 2;
-//                                in = in - d_fft_size * 2;
-//                            }
 
 
                                     FILE *fp;
@@ -693,7 +569,6 @@ namespace gr {
                                     find_max(output_abs, maxindex);
                                     std::cout << "the bigest at index " << maxindex << "with output" << output_abs[maxindex]
                                               << std::endl;
-//                    printf("abs compute success\n");
                                     if (output_abs[maxindex] >= d_threshold) {
                                         /****    相关算法3000点（长度为signal.size()-data.size()）     *****/
                                         pss_found= true;
@@ -749,35 +624,6 @@ namespace gr {
                                             d_alice_pssfound=true;
                                             printf("d_alice_pssfound=%d\n",d_alice_pssfound);
                                         }
-
-//                                printf(" write items num = %d, input_items_num = %d, ret = %d\n", NUM,
-//                                       input_items_num,
-//                                       ret);
-//                                struct timeval timer;
-//                                gettimeofday(&timer, NULL);
-//                                std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us"
-//                                          << std::endl;
-//                                gr::thread::scoped_lock lock(mutex);
-//                                do_update();
-//                                if (!d_fp)
-//                                    return noutput_items;
-//                                // 先清空文件
-//                                ftruncate(fileno(d_fp), 0);
-//                                rewind(d_fp);
-//
-//                                int t_size = fwrite(in + begin_index, sizeof(gr_complex), NUM, d_fp);
-//                                rewind(d_fp);
-//
-//                                if(d_latency > 0) usleep(d_latency);
-//                                status_file = true;
-//                                send_message();
-//                                if (ferror(d_fp)) {
-//                                    std::stringstream s;
-//                                    s << "file_sink write failed with error " << fileno(d_fp) << std::endl;
-//                                    throw std::runtime_error(s.str());
-//                                }
-//
-//                                if (d_unbuffered) fflush(d_fp);
                                         if(d_timeslot==0){
                                             d_save_status=1;
                                         }else{

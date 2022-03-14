@@ -418,7 +418,7 @@ namespace gr {
       int file_source_roi_impl::work(int noutput_items, gr_vector_const_void_star &input_items,
                                      gr_vector_void_star &output_items) {
 
-          cnt++;
+//          cnt++;
 
           char *o = (char*)output_items[0];//point to output buffer
           int i;
@@ -482,9 +482,9 @@ namespace gr {
               send_times++;
               printf("%d times have been sent\n",send_times);
               /*多次测试*/
-              if(send_times>=10){
-              throw std::runtime_error("one time is over\n");
-                }
+//              if(send_times>=10){
+//              throw std::runtime_error("one time is over\n");
+//                }
 
               /*单次测试*/
 //                one_time= true;
