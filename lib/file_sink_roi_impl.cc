@@ -1,17 +1,17 @@
 /* -*- c++ -*- */
-/* 
+/*
  * Copyright 2021 <+YOU OR YOUR COMPANY+>.
- * 
+ *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3, or (at your option)
  * any later version.
- * 
+ *
  * This software is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this software; see the file COPYING.  If not, write to
  * the Free Software Foundation, Inc., 51 Franklin Street,
@@ -72,18 +72,18 @@ namespace gr {
                   receive_times(0),//测试用，实际使用时删除
                   d_alice_pssfound(false),
                   d_count(0)
-                  {
-                      set_relative_rate(1.0 / 9000);
+        {
+            set_relative_rate(1.0 / 9000);
 
-                      d_port = pmt::mp("msg_status_file");
-                      message_port_register_out(d_port);
+            d_port = pmt::mp("msg_status_file");
+            message_port_register_out(d_port);
 
-                      std::cout<<"threshold = "<<d_threshold<<"receive_length = "<<d_receive_length<<"fft_size="<<d_fft_size<<std::endl;
-                      d_fft = new fft_complex(d_fft_size, forward, nthreads);
-                      if (!set_window(window)) {
-                          throw std::runtime_error("fft_vcc: window not the same length as fft_size\n");
-                      }
-                      times=0;
+            std::cout<<"threshold = "<<d_threshold<<"receive_length = "<<d_receive_length<<"fft_size="<<d_fft_size<<std::endl;
+            d_fft = new fft_complex(d_fft_size, forward, nthreads);
+            if (!set_window(window)) {
+                throw std::runtime_error("fft_vcc: window not the same length as fft_size\n");
+            }
+            times=0;
         }
         /***相关计算函数***/
         std::vector<float> file_sink_roi_impl::xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data){
@@ -199,12 +199,79 @@ namespace gr {
             // detect whether res is sine or not
             std::vector<float> fft_abs;
             for (int i=0;i<d_fft_size;i++) {
-                fft_abs.push_back(sqrt(pow((fft_output+i)->real(), 2) + pow((fft_output+i)->imag(), 2)));
+                fft_abs.push_back((pow((fft_output+i)->real(), 2) + pow((fft_output+i)->imag(), 2))/d_fft_size);
             }
 
             delete fft_output; // 销毁并回收内存
 
             return fft_abs;
+        }
+/*** new xcorr  ***/
+        std::vector<gr_complex> file_sink_roi_impl::pure_fft(gr_complex *in,bool forward,bool shift,int fft_size){
+            gr::fft::fft_complex * d_fft_temp=new gr::fft::fft_complex(fft_size,forward,1);
+            std::cout<<"fft_size="<<fft_size<<std::endl;
+            if(!forward && shift) {  // apply an ifft shift on the data
+                gr_complex *dst = d_fft_temp->get_inbuf();
+                unsigned int len = (unsigned int)(floor(fft_size/2.0)); // half length of complex array
+                memcpy(&dst[0], &in[len], sizeof(gr_complex)*(fft_size - len));
+                memcpy(&dst[fft_size - len], &in[0], sizeof(gr_complex)*len);
+            }
+            else {
+                memcpy(d_fft_temp->get_inbuf(), in, sizeof(gr_complex) * fft_size);
+            }
+            d_fft_temp->execute(); // 计算fft
+
+            // 获取输出
+            gr_complex *fft_output = new gr_complex[fft_size];
+            if(forward && shift) {  // apply a fft shift on the data
+                unsigned int len = (unsigned int)(ceil(fft_size/2.0));
+                memcpy(&fft_output[0], &d_fft_temp->get_outbuf()[len], sizeof(gr_complex)*(fft_size - len));
+                memcpy(&fft_output[fft_size - len], &d_fft_temp->get_outbuf()[0], sizeof(gr_complex)*len);
+            }
+            else {
+                memcpy (fft_output, d_fft_temp->get_outbuf (), sizeof(gr_complex) * fft_size);
+            }
+            std::vector<gr_complex> output(fft_size);
+            for(int i=0;i<fft_size;++i){
+                output[i]=fft_output[i];
+            }
+            delete fft_output;
+            delete d_fft_temp;
+            std::cout<<"output.size="<<output.size()<<std::endl;
+            return output;
+        }
+        std::vector<float> file_sink_roi_impl::xcorr_temp_fft(const gr_complex * in,const gr_complex * data,int num_input,int num_data){
+            gr_complex * a = new gr_complex[2*num_input];
+            gr_complex * b = new gr_complex[2*num_input];
+            gr_complex * tmp = new gr_complex[2*num_input];
+            for(int i=0;i<2*num_input;++i){
+                if(i<num_input){
+                    a[i]=in[i];
+                }else{
+                    a[i]=0;
+                }
+            }
+            for(int i=0;i<2*num_input;++i){
+                if(i<num_data){
+                    b[i]=data[i];
+                }else{
+                    b[i]=0;
+                }
+            }
+            std::vector<gr_complex> a_fft=pure_fft(a, true,false, 2*num_input);
+            std::vector<gr_complex> b_fft=pure_fft(b, true,false, 2*num_input);
+            delete a;
+            delete b;
+            for(int i=0;i<2*num_input;++i){
+                tmp[i]=a_fft[i]*conj(b_fft[i]);
+            }
+            std::vector<gr_complex> tmp_fft= pure_fft(tmp, false,false, 2*num_input);
+            std::vector<float> output(num_input);
+            for(int i=0;i < output.size();++i){
+                output[i]=abs(tmp_fft[i])/float(2*num_input);
+            }
+            delete tmp;
+            return output;
         }
 /*** 进行PSS相关之前的能量检测  ***/
         bool file_sink_roi_impl::detect_energe(const std::vector<float> &fft_abs) {
@@ -216,7 +283,7 @@ namespace gr {
             for(int i=1;i<freq_size;i++){
                 sum_signal+=fft_abs[i];
             }
-            for(int i=d_fft_size;i>(d_fft_size-freq_size);i--){
+            for(int i=d_fft_size-1;i>=(d_fft_size-freq_size);i--){
                 sum_signal+=fft_abs[i];
             }
             sum_noise=fft_abs[0]*0.3;
@@ -233,6 +300,7 @@ namespace gr {
 //            printf("snr_ratio = %f", snr_ratio);
 
             if(snr_ratio>d_energe){
+                std::cout<<"snr_ratio=---"<<snr_ratio<<std::endl;
                 return true;}
 
             return false;
@@ -247,7 +315,7 @@ namespace gr {
             for(int i=1;i<freq_size;i++){
                 sum_signal+=fft_abs[i];
             }
-            for(int i=d_fft_size;i>(d_fft_size-freq_size);i--){
+            for(int i=d_fft_size-1;i>=(d_fft_size-freq_size);i--){
                 sum_signal+=fft_abs[i];
             }
             sum_noise=fft_abs[0]*0.3;
@@ -330,10 +398,10 @@ namespace gr {
                         fread(data_dmrs, sizeof(gr_complex), NUM, fpdmrs);
                         in = in + (2048 * 2 );
                         ret =ret +(2048 * 2 );
-                        int corr_len_dmrs = (input_items_num - ret) > 4000 ? 4000 : (input_items_num - ret);
+                        int corr_len_dmrs = (input_items_num - ret) > 4096 ? 4096 : (input_items_num - ret);
                         printf("start to calculate xcorr ret=%d,corr_len_dmrs =%d \n",ret,corr_len_dmrs);
-                        std::vector<float> output_abs = xcorr(in, data_dmrs,
-                                                              corr_len_dmrs, NUM);
+                        std::vector<float> output_abs = xcorr_temp_fft(in, data_dmrs,
+                                                                       corr_len_dmrs, NUM);
                         int maxindex_dmrs;//存入最大的索引值
                         find_max(output_abs, maxindex_dmrs);
                         std::cout << "the bigest at index " << maxindex_dmrs << "with output" << output_abs[maxindex_dmrs]
@@ -395,9 +463,9 @@ namespace gr {
                             }
                             cnt=0;
 
-                        if(d_latency > 0) usleep(d_latency);
-                        status_file = true;
-                        send_message();
+                            if(d_latency > 0) usleep(d_latency);
+                            status_file = true;
+                            send_message();
                             if(d_alice){
                                 receive_times++;
                                 d_alice_rec= false;
@@ -428,9 +496,9 @@ namespace gr {
                             d_detect_wait=3;
                         }
                         cnt=0;
-                    if(d_latency > 0) usleep(d_latency);
-                    status_file = true;
-                    send_message();
+                        if(d_latency > 0) usleep(d_latency);
+                        status_file = true;
+                        send_message();
                         if(d_alice){
                             receive_times++;
                             printf("%d times received\n",receive_times);
@@ -545,7 +613,7 @@ namespace gr {
                                             break;
                                     }
                                     printf("signal start at ret = %d,shift_index=%d\n", ret,shift_index);
-                                    if ((ret + 3000 + shift_index ) > input_items_num && !corr_start) {
+                                    if ((ret + 4096 + shift_index ) > input_items_num && !corr_start) {
                                         printf("left data is not enough\n");
                                         corr_start = true;
                                         break;
@@ -559,9 +627,9 @@ namespace gr {
                                     fread(data, sizeof(gr_complex), NUM, fp);
                                     ret=ret+shift_index;
                                     in=in+shift_index;
-                                    int corr_len=(input_items_num - ret) > 3000 ? 3000 : (input_items_num - ret);
-                                    std::vector<float> output_abs = xcorr(in, data,
-                                                                          corr_len, NUM);
+                                    int corr_len=(input_items_num - ret) > 4096 ? 4096 : (input_items_num - ret);
+                                    std::vector<float> output_abs = xcorr_temp_fft(in, data,
+                                                                                   corr_len, NUM);
                                     int maxindex;//存入最大的索引值
 //                                int max_left = 0, max_right = 0;
                                     int begin_index = 0;

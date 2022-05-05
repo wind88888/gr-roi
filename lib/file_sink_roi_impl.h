@@ -100,10 +100,12 @@ namespace gr {
 
         void send_message();
         std::vector<float> xcorr(const gr_complex* in,const gr_complex* data,int num_input,int num_data);
+        std::vector<float> xcorr_temp_fft(const gr_complex * in,const gr_complex * data,int num_input,int num_data);
         void find_max(std::vector<float>  output_abs,int &maxindex);
 
           bool set_window(const std::vector<float> &window);
           std::vector<float> do_fft(const gr_complex *in);
+          std::vector<gr_complex> pure_fft(gr_complex *in,bool forward,bool shift,int fft_size);
 //        bool detect_energe(const std::vector<float> &fft_abs,const float * detect_window);
           bool detect_energe(const std::vector<float> &fft_abs);
           bool detect_energe_PSSCH(const std::vector<float> &fft_abs);
