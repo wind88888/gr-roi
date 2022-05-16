@@ -423,7 +423,7 @@ namespace gr {
                     }
                     printf("%d items between two PSSCH ",d_count);
                     printf("now start to save PSSCH, %d/%d items have been saved",cnt,d_receive_length*PSSCH_LEN);
-
+                    d_count=0;
                     struct timeval timer;
                     gettimeofday(&timer, NULL);
                     std::cout << "receive time: " << timer.tv_sec << "s " << timer.tv_usec << "us"
@@ -562,6 +562,7 @@ namespace gr {
                                 d_save_status = 1;
                                 d_alice_pssfound=false;
                                 d_waitslot = 0;
+                                d_count=0;
                             }
                         } else {
                             ret = d_timeslot * PSSCH_LEN + PSSCH_LEN - 2048 - 160 - d_waitslot;//本次循环已经达到消耗要求，于是需要精确把握消耗的数据
@@ -570,6 +571,7 @@ namespace gr {
                             d_save_status = 1;
                             d_alice_pssfound=false;
                             d_waitslot = 0;
+                            d_count=0;
                         }
 
                     }
