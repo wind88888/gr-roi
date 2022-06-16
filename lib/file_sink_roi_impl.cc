@@ -455,6 +455,8 @@ namespace gr {
                         }
                         if(cnt==d_receive_length*PSSCH_LEN){
                             printf("PSSCH has been saved, items number =%d \n",cnt);
+                            rewind(d_fp);
+                            fflush (d_fp);
                             if(d_alice){
                                 d_save_status=-1;
                             } else{
@@ -489,6 +491,8 @@ namespace gr {
                         in += count;
                         cnt+=count;
                         printf("PSSCH has been saved, saved items number =%d \n",cnt);
+                        rewind(d_fp);
+                        fflush (d_fp);
                         if(d_alice){
                             d_save_status=-1;
                         } else{
@@ -593,26 +597,28 @@ namespace gr {
                                 printf("signal may start at ret=%d,First_Detection=%d\n", ret, First_Detection);
                                 if (First_Detection == 3 || corr_start) {
                                     int shift_index=0;
-                                    int si=d_fft_size/128;
-                                    switch (si) {
-                                        case 0:
-                                            shift_index=1400;
-                                            break;
-                                        case 1:
-                                            shift_index=1400;
-                                            break;
-                                        case 2:
-                                            shift_index=1200;
-                                            break;
-                                        case 4:
-                                            shift_index=800;
-                                            break;
-                                        case 8:
-                                            shift_index=0;
-                                            break;
-                                        default:
-                                            shift_index=0;
-                                            break;
+                                    if(d_alice) {
+                                        int si = d_fft_size / 128;
+                                        switch (si) {
+                                            case 0:
+                                                shift_index = 1400;
+                                                break;
+                                            case 1:
+                                                shift_index = 1400;
+                                                break;
+                                            case 2:
+                                                shift_index = 1200;
+                                                break;
+                                            case 4:
+                                                shift_index = 800;
+                                                break;
+                                            case 8:
+                                                shift_index = 0;
+                                                break;
+                                            default:
+                                                shift_index = 0;
+                                                break;
+                                        }
                                     }
                                     printf("signal start at ret = %d,shift_index=%d\n", ret,shift_index);
                                     if ((ret + 4096 + shift_index ) > input_items_num && !corr_start) {
@@ -637,12 +643,21 @@ namespace gr {
                                     int begin_index = 0;
                                     bool pss_found = false;
                                     find_max(output_abs, maxindex);
-                                    std::cout << "the bigest at index " << maxindex << "with output" << output_abs[maxindex]
+                                    std::cout << "the bigest at index " << maxindex << " with output " << output_abs[maxindex]
                                               << std::endl;
                                     if (output_abs[maxindex] >= d_threshold) {
                                         /****    相关算法3000点（长度为signal.size()-data.size()）     *****/
-                                        pss_found= true;
-                                        begin_index=maxindex;
+                                        if(maxindex>=2192){
+                                            int begin_index_tmp=maxindex-2192;
+                                            if(output_abs[begin_index_tmp] >= d_threshold||output_abs[begin_index_tmp]>=output_abs[maxindex]*0.9){
+                                                pss_found= true;
+                                                begin_index=begin_index_tmp;
+                                                std::cout<<"begin_index offset left by 2192 units\n"<<std::endl;
+                                            }
+                                        }else{
+                                            pss_found= true;
+                                            begin_index=maxindex;
+                                        }
                                         /****    相关算法2（长度为signal.size()-data.size()）     *****/
 ////
 //                                    max_left = maxindex > PSS_LEN ? (maxindex - PSS_LEN) : -1;
@@ -688,7 +703,7 @@ namespace gr {
                                     if (pss_found) {
                                         printf("PSS sequences have been found\n");
 
-                                        std::cout << "the pss begin at index " << begin_index+ret << "with output"
+                                        std::cout << "the pss begin at index " << begin_index+ret << " with output "
                                                   << output_abs[begin_index] << std::endl;
                                         if(d_alice){
                                             d_alice_pssfound=true;
