@@ -27,7 +27,7 @@
 #include <cstdio>
 #include <pthread.h>
 
-
+#define MAXPATH 1000
 namespace gr {
   namespace roi {
 

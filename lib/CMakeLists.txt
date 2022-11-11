@@ -29,6 +29,8 @@ list(APPEND roi_sources
     file_sink_roi_impl.cc )
 
 set(roi_sources "${roi_sources}" PARENT_SCOPE)
+#set(DMRS_PATH ${CMAKE_CURRENT_SOURCE_DIR}/DMRS)
+#set(PSS_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Test_Out_Data_1)
 if(NOT roi_sources)
 	MESSAGE(STATUS "No C++ sources... skipping lib/")
 	return()

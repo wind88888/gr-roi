@@ -325,7 +325,7 @@ namespace gr {
 
 
             sum_signal=sum_signal/sum_window;
-            sum_noise=sum_noise/(d_fft_size-sum_window);
+            sum_noise=  sum_noise/(d_fft_size-sum_window);
 
             float snr_ratio=sum_signal/sum_noise;
 //            printf("sum_window=%f,sum_signal=%f,sum_noise=%f,freq_size=%d,snr_ratio=%f",sum_window,sum_signal,sum_noise,freq_size,snr_ratio);
@@ -382,7 +382,7 @@ namespace gr {
                         if(!d_alice_rec){
                             times++;
                             /***这里在实际使用时可以判断失败然后跳过DMRS相关***/
-                            if(times>11){
+                            if(times>40){//延迟上限 origin data:11
                                 printf("enege detect failed times of consumed is %d\n",times);
                                 times=0;
                                 d_save_status=-1;//返回继续进行PSS检波
@@ -392,8 +392,15 @@ namespace gr {
                     }
                     if(d_alice_rec&&(times==-1)) {
                         FILE *fpdmrs;
-                        fpdmrs = fopen("/home/pc/ROI/data/corr_data/DMRS", "rb");
-                        if (fpdmrs == NULL) return noutput_items;
+//                        fpdmrs = fopen("/home/pc/ROI/data/corr_data/DMRS", "rb");
+                        char dmrs_path[MAXPATH];
+                        std::string tmp=getcwd(dmrs_path,MAXPATH);
+                        std::string cur_dmrs_path=tmp+"/DMRS";
+                        fpdmrs = fopen(cur_dmrs_path.c_str(), "rb");
+                        if (fpdmrs == NULL) {
+                            std::cout<<"open DMRS file failed"<<std::endl;
+                            return noutput_items;
+                        }
                         gr_complex data_dmrs[2192] = {0};
                         fread(data_dmrs, sizeof(gr_complex), NUM, fpdmrs);
                         in = in + (2048 * 2 );
@@ -581,6 +588,7 @@ namespace gr {
                     }
 
                     break;
+
                 case -1 :
 
 //加入能量检测窗
@@ -629,8 +637,15 @@ namespace gr {
 
 
                                     FILE *fp;
-                                    fp = fopen("/home/pc/ROI/data/corr_data/Test_Out_Data_1", "rb");
-                                    if (fp == NULL) return noutput_items;
+//                                    fp = fopen("/home/pc/ROI/data/corr_data/Test_Out_Data_1", "rb");
+                                    char pss_path[MAXPATH];
+                                    std::string tmp=getcwd(pss_path,MAXPATH);
+                                    std::string cur_pss_path=tmp+"/Test_Out_Data_1";
+                                    fp = fopen(cur_pss_path.c_str(), "rb");
+                                    if (fp == NULL){
+                                        std::cout<<"open file failed-----"<<std::endl;
+                                        return noutput_items;
+                                    }
                                     gr_complex data[2192] = {0};
                                     fread(data, sizeof(gr_complex), NUM, fp);
                                     ret=ret+shift_index;
